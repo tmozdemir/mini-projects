@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Boarding Simulation: Spiral v4 vs Pure Steffen</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: #0a0e1a; }
+  * { box-sizing: border-box; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useCallback } = React;
+
+const ROWS = 31;
+const SEAT_TYPES = ["window", "middle", "aisle", "aisle", "middle", "window"];
+const LOGICAL_TICK_MS = 100;
+const PAX_PER_TICK = 2;
+const TOTAL_PAX = ROWS * 6; // 186
+
+// ── Spiral v4 (permutation-of-16, +15-shift repeat) ──────────────────────────
+const SPIRAL_SEQUENCE = [1,7,13,2,4,10,3,8,14,5,11,6,12,16,9,15];
+
+function buildSpiralQueue() {
+  const queue = [];
+  const allocated = new Set();
+  const totalPerSide = ROWS * 3;
+  let k = 0;
+
+  while (allocated.size < totalPerSide && k < 50) {
+    for (const v of SPIRAL_SEQUENCE) {
+      const val = v + 15 * k;
+      if (val > totalPerSide || allocated.has(val)) continue;
+      allocated.add(val);
+
+      const rowOffset = Math.floor((val - 1) / 3);
+      const col = (val - 1) % 3;
+      const row = ROWS - rowOffset;
+      const rightCol = 5 - col;
+      queue.push({ row, col, id: `${row}-${col}` });
+      queue.push({ row, col: rightCol, id: `${row}-${rightCol}` });
+    }
+    k++;
+  }
+  return queue;
+}
+
+// ── Pure Steffen ─────────────────────────────────────────────────────────────
+function buildSteffenQueue() {
+  const queue = [];
+  const phases = ["window", "middle", "aisle"];
+  const parities = ["even", "odd"];
+  for (const phase of phases) {
+    for (const parity of parities) {
+      for (let row = ROWS; row >= 1; row--) {
+        const isEven = row % 2 === 0;
+        if ((parity === "even" && !isEven) || (parity === "odd" && isEven)) continue;
+        for (let col = 0; col < 6; col++) {
+          if (SEAT_TYPES[col] === phase) {
+            queue.push({ row, col, id: `${row}-${col}` });
+          }
+        }
+      }
+    }
+  }
+  return queue;
+}
+
+const SPIRAL_QUEUE = buildSpiralQueue();
+const STEFFEN_QUEUE = buildSteffenQueue();
+
+function createSim() {
+  return { passengers: [], queueIndex: 0, seatedSet: new Set(), ticks: 0, aisleSum: 0, done: false };
+}
+
+// Runs one logical tick on a sim against a given queue. Returns true if just finished.
+function runTick(sim, queue) {
+  if (sim.done) return false;
+
+  const aisleOccupied = new Set();
+  for (const p of sim.passengers) if (!p.seated) aisleOccupied.add(p.aisleProgress);
+
+  const sorted = [...sim.passengers].sort((a, b) => a.aisleProgress - b.aisleProgress);
+  for (const p of sorted) {
+    if (p.seated) continue;
+    if (p.aisleProgress >= p.row) {
+      p.seated = true;
+      sim.seatedSet.add(p.id);
+      aisleOccupied.delete(p.aisleProgress);
+    } else {
+      const next = p.aisleProgress + 1;
+      if (!aisleOccupied.has(next)) {
+        aisleOccupied.delete(p.aisleProgress);
+        p.aisleProgress = next;
+        aisleOccupied.add(next);
+      }
+    }
+  }
+
+  let added = 0;
+  while (added < PAX_PER_TICK && sim.queueIndex < queue.length) {
+    if (aisleOccupied.has(1)) break;
+    const seat = queue[sim.queueIndex];
+    sim.passengers.push({ ...seat, aisleProgress: 1, seated: false });
+    aisleOccupied.add(1);
+    sim.queueIndex++;
+    added++;
+  }
+
+  let activeInAisle = 0;
+  for (const p of sim.passengers) if (!p.seated) activeInAisle++;
+  sim.aisleSum += activeInAisle;
+
+  sim.ticks++;
+
+  if (sim.seatedSet.size >= TOTAL_PAX) {
+    sim.done = true;
+    return true;
+  }
+  return false;
+}
+
+// ── Visual config ────────────────────────────────────────────────────────────
+const PALETTE = {
+  bg: "#0a0e1a",
+  fuselage: "#111827",
+  fuselageBorder: "#1e2a3a",
+  aisle: "#0d1220",
+  text: "#94a3b8",
+  textBright: "#e2e8f0",
+  panel: "#0f172a",
+  panelBorder: "#1e3a5f",
+};
+
+const PHASE_COLOURS = { window: "#60a5fa", middle: "#34d399", aisle: "#fbbf24" };
+
+const PLANES = [
+  { key: "spiral",  label: "Spiral v4",    accent: "#a78bfa", glow: "#c4b5fd", queue: SPIRAL_QUEUE },
+  { key: "steffen", label: "Pure Steffen", accent: "#10b981", glow: "#34d399", queue: STEFFEN_QUEUE },
+];
+
+const CELL = 9, GAP = 1, AISLE_W = 12;
+const gridH = ROWS * CELL + ROWS * GAP;
+const svgW = 6 * (CELL + GAP) + AISLE_W + 16;
+const svgH = gridH + 28;
+
+function colToX(col) {
+  return col < 3 ? col * (CELL + GAP) : col * (CELL + GAP) + AISLE_W;
+}
+function rowToY(row) {
+  return (row - 1) * (CELL + GAP);
+}
+
+function PlaneSVG({ sim, accent, glow }) {
+  const aislePassengers = {};
+  for (const p of sim.passengers) {
+    if (!p.seated && p.aisleProgress > 0) {
+      if (!aislePassengers[p.aisleProgress]) aislePassengers[p.aisleProgress] = [];
+      aislePassengers[p.aisleProgress].push(p);
+    }
+  }
+
+  return (
+    <svg width={svgW} height={svgH} style={{ display: "block" }}>
+      <rect x={1} y={10} width={svgW - 2} height={svgH - 14} rx={6}
+        fill="none" stroke={PALETTE.fuselageBorder} strokeWidth={1} />
+      <text x={svgW / 2} y={7} textAnchor="middle" fontSize={6} fill={PALETTE.text} fontFamily="monospace">▲</text>
+
+      <g transform="translate(8, 14)">
+        <rect x={3 * (CELL + GAP)} y={0} width={AISLE_W} height={gridH} fill={PALETTE.aisle} rx={1} />
+
+        {Array.from({ length: ROWS }, (_, ri) => {
+          const row = ri + 1;
+          return Array.from({ length: 6 }, (_, col) => {
+            const id = `${row}-${col}`;
+            const isSeated = sim.seatedSet.has(id);
+            return (
+              <rect key={id}
+                x={colToX(col)} y={rowToY(row)}
+                width={CELL} height={CELL} rx={1}
+                fill={isSeated ? accent : "#1c2333"}
+                stroke={isSeated ? glow : "#2a3a52"}
+                strokeWidth={0.6}
+              />
+            );
+          });
+        })}
+
+        {Object.entries(aislePassengers).map(([r, paxList]) => {
+          const row = parseInt(r);
+          const cx = 3 * (CELL + GAP) + AISLE_W / 2;
+          const cy = rowToY(row) + CELL / 2;
+          const phase = SEAT_TYPES[paxList[0].col];
+          return (
+            <circle key={`ap-${r}`} cx={cx} cy={cy} r={3}
+              fill={PHASE_COLOURS[phase]} opacity={0.92} />
+          );
+        })}
+      </g>
+    </svg>
+  );
+}
+
+function BoardingComparison() {
+  const simsRef = useRef({ spiral: createSim(), steffen: createSim() });
+  const [renderTick, setRenderTick] = useState(0);
+  const [running, setRunning] = useState(false);
+  const [speed, setSpeed] = useState(2);
+  const [allDone, setAllDone] = useState(false);
+  const intervalRef = useRef(null);
+
+  const RENDER_MS = LOGICAL_TICK_MS / speed;
+
+  const reset = useCallback(() => {
+    clearInterval(intervalRef.current);
+    simsRef.current = { spiral: createSim(), steffen: createSim() };
+    setRunning(false);
+    setAllDone(false);
+    setRenderTick(0);
+  }, []);
+
+  useEffect(() => {
+    if (!running || allDone) { clearInterval(intervalRef.current); return; }
+
+    intervalRef.current = setInterval(() => {
+      const sims = simsRef.current;
+      runTick(sims.spiral, SPIRAL_QUEUE);
+      runTick(sims.steffen, STEFFEN_QUEUE);
+
+      if (sims.spiral.done && sims.steffen.done) {
+        setAllDone(true);
+        setRunning(false);
+      }
+      setRenderTick(t => t + 1);
+    }, RENDER_MS);
+
+    return () => clearInterval(intervalRef.current);
+  }, [running, allDone, RENDER_MS]);
+
+  const sims = simsRef.current;
+
+  return (
+    <div style={{
+      background: PALETTE.bg,
+      minHeight: "100vh",
+      fontFamily: "'SF Mono', 'Fira Mono', monospace",
+      color: PALETTE.text,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      padding: "20px 12px",
+      gap: 14,
+    }}>
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontSize: 10, letterSpacing: "0.2em", color: "#94a3b8", marginBottom: 4, textTransform: "uppercase" }}>
+          Head-to-head · 186 seats
+        </div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: PALETTE.textBright, letterSpacing: "-0.02em" }}>
+          Spiral v4 vs Pure Steffen
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+        {PLANES.map(({ key, label, accent, glow }) => {
+          const sim = sims[key];
+          const elapsed = ((sim.ticks * LOGICAL_TICK_MS) / 1000).toFixed(1);
+          const pct = Math.round((sim.seatedSet.size / TOTAL_PAX) * 100);
+          const util = sim.ticks > 0 ? ((sim.aisleSum / (sim.ticks * ROWS)) * 100).toFixed(1) : "0.0";
+
+          return (
+            <div key={key} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: accent, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                {label}
+              </div>
+              <div style={{
+                background: PALETTE.fuselage, border: `1px solid ${PALETTE.fuselageBorder}`,
+                borderRadius: 8, padding: "4px",
+              }}>
+                <PlaneSVG sim={sim} accent={accent} glow={glow} />
+              </div>
+              <div style={{
+                background: PALETTE.panel, border: `1px solid ${PALETTE.panelBorder}`,
+                borderRadius: 6, padding: "6px 10px", textAlign: "center", minWidth: 110,
+                display: "flex", flexDirection: "column", gap: 2,
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: PALETTE.textBright }}>{elapsed}s</div>
+                <div style={{ fontSize: 9, color: PALETTE.text }}>{sim.seatedSet.size}/{TOTAL_PAX} · {pct}%</div>
+                <div style={{ fontSize: 9, color: accent, fontWeight: 700 }}>Aisle util: {util}%</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div style={{ display: "flex", gap: 12, fontSize: 9, flexWrap: "wrap", justifyContent: "center" }}>
+        {[
+          { colour: "#60a5fa", label: "Window" },
+          { colour: "#34d399", label: "Middle" },
+          { colour: "#fbbf24", label: "Aisle" },
+        ].map(({ colour, label }) => (
+          <div key={label} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <div style={{ width: 8, height: 8, borderRadius: 2, background: colour }} />
+            {label}
+          </div>
+        ))}
+      </div>
+
+      {/* Controls */}
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
+        <button onClick={() => { if (!allDone) setRunning(r => !r); }} style={{
+          background: running ? "#1e3a5f" : "#0ea5e9",
+          color: "#fff", border: "none", borderRadius: 8,
+          padding: "10px 22px", fontSize: 13, fontWeight: 700,
+          cursor: allDone ? "not-allowed" : "pointer",
+          fontFamily: "monospace", letterSpacing: "0.05em", opacity: allDone ? 0.5 : 1,
+        }}>
+          {running ? "⏸ Pause" : allDone ? "✓ Done" : "▶ Start"}
+        </button>
+
+        <button onClick={reset} style={{
+          background: "transparent", color: PALETTE.text,
+          border: `1px solid ${PALETTE.panelBorder}`, borderRadius: 8,
+          padding: "10px 16px", fontSize: 13, cursor: "pointer", fontFamily: "monospace",
+        }}>↺ Reset</button>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11 }}>
+          <span>Speed</span>
+          {[0.5, 1, 2, 3].map(s => (
+            <button key={s} onClick={() => setSpeed(s)} style={{
+              background: speed === s ? "#0ea5e9" : "transparent",
+              color: speed === s ? "#fff" : PALETTE.text,
+              border: `1px solid ${speed === s ? "#0ea5e9" : PALETTE.panelBorder}`,
+              borderRadius: 6, padding: "5px 10px", fontSize: 10,
+              cursor: "pointer", fontFamily: "monospace",
+            }}>{s === 0.5 ? "½×" : `${s}×`}</button>
+          ))}
+        </div>
+      </div>
+
+      {allDone && (() => {
+        const spiral = sims.spiral, steffen = sims.steffen;
+        const sTime = (spiral.ticks * LOGICAL_TICK_MS / 1000);
+        const fTime = (steffen.ticks * LOGICAL_TICK_MS / 1000);
+        const sUtil = (spiral.aisleSum / (spiral.ticks * ROWS) * 100);
+        const fUtil = (steffen.aisleSum / (steffen.ticks * ROWS) * 100);
+        const timeWinner = sTime < fTime ? "Spiral v4" : sTime > fTime ? "Steffen" : "Tie";
+        const utilWinner = sUtil > fUtil ? "Spiral v4" : sUtil < fUtil ? "Steffen" : "Tie";
+
+        return (
+          <div style={{
+            background: "rgba(14,165,233,0.06)",
+            border: `1px solid ${PALETTE.panelBorder}`,
+            borderRadius: 10, padding: "12px 18px",
+            textAlign: "center", display: "flex", flexDirection: "column", gap: 6,
+            minWidth: 240, fontSize: 11,
+          }}>
+            <div style={{ color: PALETTE.text, textTransform: "uppercase", letterSpacing: "0.1em", fontSize: 9 }}>
+              Results
+            </div>
+            <div>⏱ Time: {timeWinner === "Tie" ? "Dead heat" : `${timeWinner} wins`} ({sTime.toFixed(1)}s vs {fTime.toFixed(1)}s)</div>
+            <div>🚶 Aisle util: {utilWinner === "Tie" ? "Tied" : `${utilWinner} wins`} ({sUtil.toFixed(1)}% vs {fUtil.toFixed(1)}%)</div>
+          </div>
+        );
+      })()}
+
+      <div style={{ fontSize: 9, color: "#3a4a6a", marginTop: 4 }}>
+        186-seat single-aisle simulation · 1 logical tick = 100ms
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<BoardingComparison />);
+</script>
+</body>
+</html>
