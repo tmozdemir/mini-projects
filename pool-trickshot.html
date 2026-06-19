@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Pool Trick Shot</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: #0a0e1a; }
+  * { box-sizing: border-box; }
+  a { color: #0ea5e9; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ── Table geometry (portrait) ───────────────────────────────────────────────
+const VB_W = 340, VB_H = 640;
+const LEFT = 20, RIGHT = 320, TOP = 20, BOTTOM = 620;
+const BALL_R = 7;
+const POCKET_R = 19.5;
+const CAPTURE_R = 22.5;
+const MID_Y = (TOP + BOTTOM) / 2;
+const BAULK_Y = BOTTOM - 100;
+
+const POCKETS = [
+  { id: 0, name: "Top-Left",     x: LEFT,  y: TOP },
+  { id: 1, name: "Top-Right",    x: RIGHT, y: TOP },
+  { id: 2, name: "Mid-Right",    x: RIGHT, y: MID_Y },
+  { id: 3, name: "Bottom-Right", x: RIGHT, y: BOTTOM },
+  { id: 4, name: "Bottom-Left",  x: LEFT,  y: BOTTOM },
+  { id: 5, name: "Mid-Left",     x: LEFT,  y: MID_Y },
+];
+
+const START_POS = { x: (LEFT + RIGHT) / 2, y: BAULK_Y };
+
+// ── Physics tuning ───────────────────────────────────────────────────────────
+const FRICTION = 0.985;
+const DAMPING = 0.9;
+const STOP_THRESHOLD = 0.12;
+const MAX_PULL = 110;
+const MAX_SPEED = 22;
+const MAX_FRAMES = 1500;
+
+function randomTarget() { return Math.floor(Math.random() * 6); }
+function randomBounces() { return 1 + Math.floor(Math.random() * 4); }
+
+function PoolTrickShot() {
+  const [score, setScore] = useState(0);
+  const [attempts, setAttempts] = useState(0);
+  const [target, setTarget] = useState(randomTarget);
+  const [required, setRequired] = useState(randomBounces);
+  const [message, setMessage] = useState("Drag back from the ball, then release to shoot!");
+  const [moving, setMoving] = useState(false);
+  const [bounces, setBounces] = useState(0);
+  const [drag, setDrag] = useState(null);
+  const [dragMode, setDragMode] = useState(null);
+  const [renderTick, setRenderTick] = useState(0);
+  const [prevMarks, setPrevMarks] = useState([]);
+
+  const ballRef = useRef({ ...START_POS, vx: 0, vy: 0 });
+  const bouncesRef = useRef(0);
+  const marksRef = useRef([]);
+  const rafRef = useRef(null);
+  const svgRef = useRef(null);
+
+  const generateRound = useCallback(() => {
+    setTarget(randomTarget());
+    setRequired(randomBounces());
+    ballRef.current = { x: ballRef.current.x, y: BAULK_Y, vx: 0, vy: 0 };
+    bouncesRef.current = 0;
+    setBounces(0);
+    setMessage("New shot! Drag back, then release.");
+    setRenderTick(t => t + 1);
+  }, []);
+
+  const resetBall = useCallback(() => {
+    ballRef.current = { x: ballRef.current.x, y: BAULK_Y, vx: 0, vy: 0 };
+    bouncesRef.current = 0;
+    setBounces(0);
+    setRenderTick(t => t + 1);
+  }, []);
+
+  function getSvgCoords(e) {
+    const rect = svgRef.current.getBoundingClientRect();
+    return {
+      x: (e.clientX - rect.left) * (VB_W / rect.width),
+      y: (e.clientY - rect.top) * (VB_H / rect.height),
+    };
+  }
+
+  function handlePointerDown(e) {
+    if (moving) return;
+    e.target.setPointerCapture?.(e.pointerId);
+    const coords = getSvgCoords(e);
+    const ball = ballRef.current;
+    const distToBall = Math.hypot(coords.x - ball.x, coords.y - ball.y);
+    if (distToBall < BALL_R + 6) {
+      setDragMode("position");
+    } else {
+      setDragMode("aim");
+    }
+    setDrag(coords);
+  }
+  function handlePointerMove(e) {
+    if (!drag || moving) return;
+    const coords = getSvgCoords(e);
+    if (dragMode === "position") {
+      const ball = ballRef.current;
+      ball.x = Math.min(RIGHT - BALL_R, Math.max(LEFT + BALL_R, coords.x));
+      ball.y = BAULK_Y;
+      setRenderTick(t => t + 1);
+    }
+    setDrag(coords);
+  }
+  function handlePointerUp() {
+    if (!drag || moving) {
+      setDrag(null);
+      setDragMode(null);
+      return;
+    }
+    if (dragMode === "position") {
+      setDrag(null);
+      setDragMode(null);
+      return;
+    }
+
+    const ball = ballRef.current;
+    const dx = drag.x - ball.x;
+    const dy = drag.y - ball.y;
+    const dist = Math.hypot(dx, dy);
+    setDrag(null);
+    setDragMode(null);
+    if (dist < 8) return;
+
+    const clamped = Math.min(dist, MAX_PULL);
+    const power = (clamped / MAX_PULL) * MAX_SPEED;
+    const norm = dist || 1;
+    ball.vx = (-dx / norm) * power;
+    ball.vy = (-dy / norm) * power;
+
+    bouncesRef.current = 0;
+    setBounces(0);
+    marksRef.current = [];
+    setMessage("");
+    setMoving(true);
+  }
+
+  const finishShot = useCallback((pottedId, tgt, req) => {
+    setMoving(false);
+    setAttempts(a => a + 1);
+    setPrevMarks([...marksRef.current]);
+
+    if (pottedId === tgt) {
+      if (bouncesRef.current === req) {
+        setScore(s => s + 1);
+        setMessage(`🎉 Potted with exactly ${req} bounce${req !== 1 ? "s" : ""}! Nice shot.`);
+        setTimeout(() => generateRound(), 1300);
+        return;
+      } else {
+        setMessage(`So close! Right pocket, but ${bouncesRef.current} bounce${bouncesRef.current !== 1 ? "s" : ""} instead of ${req}.`);
+      }
+    } else if (pottedId >= 0) {
+      setMessage(`Potted the ${POCKETS[pottedId].name} pocket — that wasn't the target!`);
+    } else {
+      setMessage(`Ball stopped on the table without potting — try again.`);
+    }
+    resetBall();
+  }, [generateRound, resetBall]);
+
+  useEffect(() => {
+    if (!moving) return;
+    const tgt = target, req = required;
+    let frame = 0;
+
+    function step() {
+      const ball = ballRef.current;
+      ball.x += ball.vx;
+      ball.y += ball.vy;
+
+      let potted = -1;
+      for (const p of POCKETS) {
+        if (Math.hypot(ball.x - p.x, ball.y - p.y) < CAPTURE_R) { potted = p.id; break; }
+      }
+      if (potted >= 0) {
+        ball.vx = 0; ball.vy = 0;
+        setRenderTick(t => t + 1);
+        finishShot(potted, tgt, req);
+        return;
+      }
+
+      let bounced = false;
+      if (ball.x < LEFT + BALL_R)  { ball.x = LEFT + BALL_R;  ball.vx = -ball.vx * DAMPING; bounced = true; }
+      if (ball.x > RIGHT - BALL_R) { ball.x = RIGHT - BALL_R; ball.vx = -ball.vx * DAMPING; bounced = true; }
+      if (ball.y < TOP + BALL_R)   { ball.y = TOP + BALL_R;   ball.vy = -ball.vy * DAMPING; bounced = true; }
+      if (ball.y > BOTTOM - BALL_R){ ball.y = BOTTOM - BALL_R;ball.vy = -ball.vy * DAMPING; bounced = true; }
+      if (bounced) {
+        bouncesRef.current += 1;
+        setBounces(bouncesRef.current);
+        marksRef.current.push({ x: ball.x, y: ball.y });
+      }
+
+      ball.vx *= FRICTION;
+      ball.vy *= FRICTION;
+      const speed = Math.hypot(ball.vx, ball.vy);
+      frame++;
+
+      if (speed < STOP_THRESHOLD || frame > MAX_FRAMES) {
+        ball.vx = 0; ball.vy = 0;
+        setRenderTick(t => t + 1);
+        finishShot(-1, tgt, req);
+        return;
+      }
+
+      setRenderTick(t => t + 1);
+      rafRef.current = requestAnimationFrame(step);
+    }
+
+    rafRef.current = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [moving, target, required, finishShot]);
+
+  const ball = ballRef.current;
+  const targetPocket = POCKETS[target];
+
+  let aimLine = null, pullLine = null;
+  if (drag) {
+    const dx = drag.x - ball.x;
+    const dy = drag.y - ball.y;
+    const dist = Math.hypot(dx, dy);
+    const clamped = Math.min(dist, MAX_PULL);
+    if (dist > 2) {
+      const norm = dist || 1;
+      const dirx = -dx / norm, diry = -dy / norm;
+      const previewLen = clamped * 2;
+      aimLine = { x1: ball.x, y1: ball.y, x2: ball.x + dirx * previewLen, y2: ball.y + diry * previewLen, power: clamped / MAX_PULL };
+      pullLine = { x1: ball.x, y1: ball.y, x2: drag.x, y2: drag.y };
+    }
+  }
+
+  return (
+    <div style={{
+      background: "#0a0e1a",
+      minHeight: "100vh",
+      fontFamily: "'SF Mono', 'Fira Mono', monospace",
+      color: "#94a3b8",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      padding: "20px 12px",
+      gap: 14,
+    }}>
+      <style>{`
+        @keyframes pulseRing {
+          0%   { r: 23; opacity: 0.9; }
+          50%  { r: 30; opacity: 0.25; }
+          100% { r: 23; opacity: 0.9; }
+        }
+        .target-ring { animation: pulseRing 1.4s ease-in-out infinite; transform-origin: center; }
+      `}</style>
+
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontSize: 10, letterSpacing: "0.2em", color: "#0ea5e9", marginBottom: 4, textTransform: "uppercase" }}>
+          Trick Shot
+        </div>
+        <div style={{ fontSize: 20, fontWeight: 700, color: "#e2e8f0", letterSpacing: "-0.02em" }}>
+          Pocket the ball with exactly the right bounces
+        </div>
+        <div style={{ fontSize: 10, color: "#64748b", marginTop: 4 }}>
+          Drag the cue ball along the dashed line to reposition · drag elsewhere to aim & shoot
+        </div>
+        <div style={{ marginTop: 6 }}><a href="index.html" style={{ fontSize: 10 }}>&larr; Back to console</a></div>
+      </div>
+
+      {/* HUD */}
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+        {[
+          { label: "Score", value: score },
+          { label: "Shots", value: attempts },
+          { label: "Target", value: targetPocket.name, colour: "#fbbf24" },
+          { label: "Bounces needed", value: required, colour: "#34d399" },
+          { label: "Bounces so far", value: bounces, colour: "#60a5fa" },
+        ].map(({ label, value, colour }) => (
+          <div key={label} style={{
+            background: "#0f172a", border: "1px solid #1e3a5f",
+            borderRadius: 8, padding: "6px 12px", textAlign: "center", minWidth: 80,
+          }}>
+            <div style={{ fontSize: 9, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>{label}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: colour || "#e2e8f0" }}>{value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Table */}
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${VB_W} ${VB_H}`}
+        style={{ width: "100%", maxWidth: 320, touchAction: "none", display: "block" }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+      >
+        <rect x={0} y={0} width={VB_W} height={VB_H} rx={14} fill="#6b3f1f" />
+        <rect x={LEFT} y={TOP} width={RIGHT - LEFT} height={BOTTOM - TOP} fill="#1d4e8c" />
+
+        <line x1={LEFT} y1={BAULK_Y} x2={RIGHT} y2={BAULK_Y} stroke="#cbd5e1" strokeWidth={1.5} strokeDasharray="6,4" opacity={0.6} />
+
+        {POCKETS.map(p => (
+          <g key={p.id}>
+            <circle cx={p.x} cy={p.y} r={POCKET_R} fill="#0a0e1a" />
+            {p.id === target && (
+              <circle className="target-ring" cx={p.x} cy={p.y} r={23} fill="none" stroke="#fbbf24" strokeWidth={2.5} />
+            )}
+          </g>
+        ))}
+
+        {prevMarks.map((m, i) => (
+          <circle key={`mark-${i}`} cx={m.x} cy={m.y} r={4} fill="#ef4444" opacity={0.75} />
+        ))}
+
+        {pullLine && (
+          <line x1={pullLine.x1} y1={pullLine.y1} x2={pullLine.x2} y2={pullLine.y2}
+            stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4,3" opacity={0.6} />
+        )}
+
+        {aimLine && (
+          <line x1={aimLine.x1} y1={aimLine.y1} x2={aimLine.x2} y2={aimLine.y2}
+            stroke="#fbbf24" strokeWidth={2 + aimLine.power * 2} opacity={0.4 + aimLine.power * 0.5}
+            strokeLinecap="round" />
+        )}
+
+        <circle cx={ball.x} cy={ball.y} r={BALL_R} fill="#f5f5f0" stroke="#cbd5e1" strokeWidth={1} />
+      </svg>
+
+      {/* Message */}
+      <div style={{
+        minHeight: 20, fontSize: 12, fontWeight: 600, color: "#e2e8f0",
+        textAlign: "center", maxWidth: 420,
+      }}>
+        {message}
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 9, color: "#64748b" }}>
+        <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#ef4444", opacity: 0.75 }} />
+        Cushion hits from your last shot
+      </div>
+
+      {/* Controls */}
+      <button onClick={generateRound} disabled={moving} style={{
+        background: "transparent", color: "#94a3b8",
+        border: "1px solid #1e3a5f", borderRadius: 8,
+        padding: "8px 18px", fontSize: 12, cursor: moving ? "not-allowed" : "pointer",
+        fontFamily: "monospace", opacity: moving ? 0.5 : 1,
+      }}>
+        🔀 New Shot (different target / bounces)
+      </button>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<PoolTrickShot />);
+</script>
+</body>
+</html>

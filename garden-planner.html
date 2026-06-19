@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Garden Planner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: #0a0e1a; }
+  * { box-sizing: border-box; }
+  a { color: #0ea5e9; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ── Grid config ──────────────────────────────────────────────────────────────
+const GRID_SIZE = 30; // 30 x 30 = 15m x 15m at 50cm per cell
+const CELL = 14;       // viewBox units per cell
+const VB = GRID_SIZE * CELL;
+
+const GROUND_MATERIALS = [
+  { key: "grass",   label: "Grass",   color: "#5a9c3e" },
+  { key: "decking", label: "Decking", color: "#b08968" },
+  { key: "paving",  label: "Paving",  color: "#9ca3af" },
+  { key: "gravel",  label: "Gravel",  color: "#d9d4c4" },
+  { key: "soil",    label: "Soil/bed",color: "#6b4423" },
+  { key: "sleeper", label: "Sleeper", color: "#5c3a21" },
+  { key: "water",   label: "Water",   color: "#4a90d9" },
+];
+const GROUND_MAP = Object.fromEntries(GROUND_MATERIALS.map(m => [m.key, m.color]));
+const DEFAULT_GROUND = "grass";
+
+const GROUND_LEVELS = [
+  { id: 0, label: "Level 0 (base)" },
+  { id: 1, label: "Level 1 (+50cm)" },
+  { id: 2, label: "Level 2 (+100cm)" },
+];
+const LEVEL_TINT = [0, 0.12, 0.26]; // white-overlay opacity per level
+
+const LAYERS = [
+  { id: -1, label: "Ground" },
+  { id: 0, label: "L1 · 0-50cm" },
+  { id: 1, label: "L2 · 50-100cm" },
+  { id: 2, label: "L3 · 100-150cm" },
+  { id: 3, label: "L4 · 150-200cm" },
+];
+
+const ICON_CATEGORIES = {
+  Plants: ["🌱","🌿","🍃","🌾","🌸","🌷","🌹","🌼","🪴","🌳","🌲","🌴","🎍","🍂"],
+  "Furniture & structures": ["🪑","🛋️","🔥","⛱️","🧱","🪵","🚪","🏠","⛺","🌉","🪟"],
+  "Water & misc": ["💧","⛲","🕯️","💡","🪣","⚪"],
+};
+
+const SIZES = [
+  { id: 1, label: "1×1 · 50cm" },
+  { id: 2, label: "2×2 · 1m" },
+  { id: 3, label: "3×3 · 1.5m" },
+];
+
+const CHIP_COLORS = [
+  { key: "none",  label: "None",   color: "transparent" },
+  { key: "white", label: "White",  color: "#ffffff" },
+  { key: "red",   label: "Red",    color: "#fca5a5" },
+  { key: "yellow",label: "Yellow", color: "#fde68a" },
+  { key: "green", label: "Green",  color: "#bbf7d0" },
+  { key: "blue",  label: "Blue",   color: "#bfdbfe" },
+  { key: "purple",label: "Purple", color: "#e9d5ff" },
+  { key: "orange",label: "Orange", color: "#fed7aa" },
+];
+
+// Corner positions for layer indicator dots
+const CORNER = {
+  0: { dx: 0.22, dy: 0.22 },   // L1 top-left
+  1: { dx: 0.78, dy: 0.22 },   // L2 top-right
+  2: { dx: 0.22, dy: 0.78 },   // L3 bottom-left
+  3: { dx: 0.78, dy: 0.78 },   // L4 bottom-right
+};
+
+function makeEmptyGrid() {
+  const cells = [];
+  for (let i = 0; i < GRID_SIZE * GRID_SIZE; i++) {
+    cells.push({ level: 0, g: DEFAULT_GROUND, f: [null, null, null, null] });
+  }
+  return cells;
+}
+
+const STORAGE_KEY = "garden-plan-v1";
+
+function GardenPlanner() {
+  const gridRef = useRef(makeEmptyGrid());
+  const [renderTick, setRenderTick] = useState(0);
+  const [activeLayer, setActiveLayer] = useState(-1); // -1 = ground
+  const [selectedMaterial, setSelectedMaterial] = useState(DEFAULT_GROUND);
+  const [selectedLevel, setSelectedLevel] = useState(0);
+  const [selectedIcon, setSelectedIcon] = useState("🌳");
+  const [selectedChip, setSelectedChip] = useState("none");
+  const [selectedSize, setSelectedSize] = useState(1);
+  const [tool, setTool] = useState("paint"); // 'paint' | 'erase'
+  const [zoom, setZoom] = useState(1); // 0.8 | 1 | 1.4
+  const [saveState, setSaveState] = useState("idle"); // idle | saving | saved
+  const [confirmClear, setConfirmClear] = useState(false);
+
+  const svgRef = useRef(null);
+  const lastCellRef = useRef(null);
+  const saveTimerRef = useRef(null);
+  const draggingRef = useRef(false);
+
+  // ── Load from localStorage on mount ─────────────────────────────────────────
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length === GRID_SIZE * GRID_SIZE) {
+          gridRef.current = parsed;
+          setRenderTick(t => t + 1);
+        }
+      }
+    } catch (e) {
+      // no saved data yet
+    }
+  }, []);
+
+  const scheduleSave = useCallback(() => {
+    setSaveState("saving");
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(gridRef.current));
+        setSaveState("saved");
+      } catch (e) {
+        setSaveState("idle");
+      }
+    }, 500);
+  }, []);
+
+  // ── Cell editing ─────────────────────────────────────────────────────────────
+  function applyToCell(row, col) {
+    if (row < 0 || row >= GRID_SIZE || col < 0 || col >= GRID_SIZE) return;
+    const idx = row * GRID_SIZE + col;
+    const cell = gridRef.current[idx];
+
+    if (activeLayer === -1) {
+      const newG = tool === "erase" ? DEFAULT_GROUND : selectedMaterial;
+      const newLevel = tool === "erase" ? 0 : selectedLevel;
+      if (cell.g === newG && cell.level === newLevel) return;
+      gridRef.current[idx] = { ...cell, g: newG, level: newLevel };
+    } else {
+      const current = cell.f[activeLayer];
+      let newFeature = null;
+      if (tool !== "erase") {
+        newFeature = { icon: selectedIcon, chip: selectedChip, size: selectedSize };
+        if (current && current.icon === newFeature.icon && current.chip === newFeature.chip && (current.size || 1) === newFeature.size) return;
+      } else {
+        if (!current) return;
+      }
+      const newF = [...cell.f];
+      newF[activeLayer] = newFeature;
+      gridRef.current[idx] = { ...cell, f: newF };
+    }
+    setRenderTick(t => t + 1);
+    scheduleSave();
+  }
+
+  function getCellFromEvent(e) {
+    const rect = svgRef.current.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (VB / rect.width);
+    const y = (e.clientY - rect.top) * (VB / rect.height);
+    return { col: Math.floor(x / CELL), row: Math.floor(y / CELL) };
+  }
+
+  function handlePointerDown(e) {
+    e.target.setPointerCapture?.(e.pointerId);
+    draggingRef.current = true;
+    const { row, col } = getCellFromEvent(e);
+    lastCellRef.current = `${row}-${col}`;
+    applyToCell(row, col);
+  }
+  function handlePointerMove(e) {
+    if (!draggingRef.current) return;
+    const { row, col } = getCellFromEvent(e);
+    const key = `${row}-${col}`;
+    if (key === lastCellRef.current) return;
+    lastCellRef.current = key;
+    applyToCell(row, col);
+  }
+  function handlePointerUp() {
+    draggingRef.current = false;
+    lastCellRef.current = null;
+  }
+
+  function clearLayer() {
+    const grid = gridRef.current;
+    for (let i = 0; i < grid.length; i++) {
+      if (activeLayer === -1) {
+        grid[i] = { ...grid[i], g: DEFAULT_GROUND, level: 0 };
+      } else {
+        const newF = [...grid[i].f];
+        newF[activeLayer] = null;
+        grid[i] = { ...grid[i], f: newF };
+      }
+    }
+    setRenderTick(t => t + 1);
+    scheduleSave();
+  }
+
+  function clearAll() {
+    gridRef.current = makeEmptyGrid();
+    setRenderTick(t => t + 1);
+    scheduleSave();
+    setConfirmClear(false);
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  const grid = gridRef.current;
+  const renderedSize = VB * zoom;
+
+  return (
+    <div style={{
+      background: "#0a0e1a",
+      minHeight: "100vh",
+      fontFamily: "'SF Mono', 'Fira Mono', monospace",
+      color: "#94a3b8",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      padding: "20px 12px",
+      gap: 14,
+    }}>
+      <div style={{ textAlign: "center" }}>
+        <div style={{ fontSize: 10, letterSpacing: "0.2em", color: "#0ea5e9", marginBottom: 4, textTransform: "uppercase" }}>
+          Garden Planner
+        </div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: "#e2e8f0", letterSpacing: "-0.02em" }}>
+          30 × 30 grid · 50cm per square · 15m × 15m
+        </div>
+        <div style={{ marginTop: 6 }}><a href="index.html" style={{ fontSize: 10 }}>&larr; Back to console</a></div>
+      </div>
+
+      {/* Layer tabs */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center" }}>
+        {LAYERS.map(l => (
+          <button key={l.id} onClick={() => setActiveLayer(l.id)} style={{
+            background: activeLayer === l.id ? "#0ea5e9" : "transparent",
+            color: activeLayer === l.id ? "#fff" : "#94a3b8",
+            border: `1px solid ${activeLayer === l.id ? "#0ea5e9" : "#1e3a5f"}`,
+            borderRadius: 6, padding: "6px 10px", fontSize: 10,
+            cursor: "pointer", fontFamily: "monospace", fontWeight: 600,
+          }}>{l.label}</button>
+        ))}
+      </div>
+
+      {/* Palette */}
+      <div style={{
+        background: "#0f172a", border: "1px solid #1e3a5f", borderRadius: 10,
+        padding: "10px 12px", width: "100%", maxWidth: 420, display: "flex",
+        flexDirection: "column", gap: 8,
+      }}>
+        {activeLayer === -1 ? (
+          <>
+            <div style={{ fontSize: 9, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>Ground level</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {GROUND_LEVELS.map(lvl => (
+                <button key={lvl.id} onClick={() => { setSelectedLevel(lvl.id); setTool("paint"); }} style={{
+                  background: selectedLevel === lvl.id && tool === "paint" ? "#1e3a5f" : "transparent",
+                  border: `1px solid ${selectedLevel === lvl.id && tool === "paint" ? "#0ea5e9" : "#1e3a5f"}`,
+                  borderRadius: 6, padding: "5px 10px", fontSize: 10, color: "#e2e8f0", cursor: "pointer", fontFamily: "monospace",
+                }}>{lvl.label}</button>
+              ))}
+            </div>
+            <div style={{ fontSize: 9, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>Ground material</div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {GROUND_MATERIALS.map(m => (
+                <button key={m.key} onClick={() => { setSelectedMaterial(m.key); setTool("paint"); }} style={{
+                  display: "flex", alignItems: "center", gap: 5,
+                  background: selectedMaterial === m.key && tool === "paint" ? "#1e3a5f" : "transparent",
+                  border: `1px solid ${selectedMaterial === m.key && tool === "paint" ? "#0ea5e9" : "#1e3a5f"}`,
+                  borderRadius: 6, padding: "5px 8px", fontSize: 10, color: "#e2e8f0", cursor: "pointer", fontFamily: "monospace",
+                }}>
+                  <span style={{ width: 12, height: 12, borderRadius: 3, background: m.color, display: "inline-block", border: "1px solid #ffffff33" }} />
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 9, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>Icon</div>
+            {Object.entries(ICON_CATEGORIES).map(([cat, icons]) => (
+              <div key={cat}>
+                <div style={{ fontSize: 8, color: "#475569", marginBottom: 3 }}>{cat}</div>
+                <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                  {icons.map(ic => (
+                    <button key={ic} onClick={() => { setSelectedIcon(ic); setTool("paint"); }} style={{
+                      width: 28, height: 28, fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center",
+                      background: selectedIcon === ic && tool === "paint" ? "#1e3a5f" : "transparent",
+                      border: `1px solid ${selectedIcon === ic && tool === "paint" ? "#0ea5e9" : "#1e3a5f"}`,
+                      borderRadius: 6, cursor: "pointer",
+                    }}>{ic}</button>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <div style={{ fontSize: 9, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 4 }}>Size</div>
+            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+              {SIZES.map(s => (
+                <button key={s.id} onClick={() => setSelectedSize(s.id)} style={{
+                  background: selectedSize === s.id ? "#1e3a5f" : "transparent",
+                  border: `1px solid ${selectedSize === s.id ? "#0ea5e9" : "#1e3a5f"}`,
+                  borderRadius: 6, padding: "5px 10px", fontSize: 10, color: "#e2e8f0", cursor: "pointer", fontFamily: "monospace",
+                }}>{s.label}</button>
+              ))}
+            </div>
+
+            <div style={{ fontSize: 9, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 4 }}>Chip colour</div>
+            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+              {CHIP_COLORS.map(c => (
+                <button key={c.key} onClick={() => setSelectedChip(c.key)} title={c.label} style={{
+                  width: 22, height: 22, borderRadius: "50%",
+                  background: c.color === "transparent" ? "#1c2333" : c.color,
+                  border: selectedChip === c.key ? "2px solid #0ea5e9" : "1px solid #475569",
+                  cursor: "pointer", position: "relative",
+                }}>
+                  {c.key === "none" && <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#64748b" }}>✕</span>}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        <div style={{ display: "flex", gap: 8, marginTop: 4, alignItems: "center" }}>
+          <button onClick={() => setTool(tool === "erase" ? "paint" : "erase")} style={{
+            background: tool === "erase" ? "#ef4444" : "transparent",
+            color: tool === "erase" ? "#fff" : "#94a3b8",
+            border: `1px solid ${tool === "erase" ? "#ef4444" : "#1e3a5f"}`,
+            borderRadius: 6, padding: "6px 12px", fontSize: 10, cursor: "pointer", fontFamily: "monospace", fontWeight: 600,
+          }}>🧹 Eraser</button>
+
+          <div style={{ flex: 1 }} />
+
+          <span style={{ fontSize: 9, color: "#64748b" }}>Zoom</span>
+          {[0.8, 1, 1.4].map(z => (
+            <button key={z} onClick={() => setZoom(z)} style={{
+              background: zoom === z ? "#0ea5e9" : "transparent",
+              color: zoom === z ? "#fff" : "#94a3b8",
+              border: `1px solid ${zoom === z ? "#0ea5e9" : "#1e3a5f"}`,
+              borderRadius: 6, padding: "5px 9px", fontSize: 10, cursor: "pointer", fontFamily: "monospace",
+            }}>{z}×</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Grid */}
+      <div style={{
+        width: "100%", maxWidth: 420, overflow: "auto",
+        border: "1px solid #1e3a5f", borderRadius: 8, background: "#111827",
+      }}>
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${VB} ${VB}`}
+          width={renderedSize}
+          height={renderedSize}
+          style={{ display: "block", touchAction: "none" }}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
+        >
+          {/* Ground cells */}
+          {grid.map((cell, idx) => {
+            const row = Math.floor(idx / GRID_SIZE);
+            const col = idx % GRID_SIZE;
+            return (
+              <rect key={`g-${idx}`}
+                x={col * CELL} y={row * CELL} width={CELL} height={CELL}
+                fill={GROUND_MAP[cell.g]} stroke="#00000022" strokeWidth={0.5}
+              />
+            );
+          })}
+
+          {/* Level tint overlay (higher levels = lighter) */}
+          {grid.map((cell, idx) => {
+            const tint = LEVEL_TINT[cell.level] || 0;
+            if (tint <= 0) return null;
+            const row = Math.floor(idx / GRID_SIZE);
+            const col = idx % GRID_SIZE;
+            return (
+              <rect key={`t-${idx}`}
+                x={col * CELL} y={row * CELL} width={CELL} height={CELL}
+                fill="#ffffff" opacity={tint}
+              />
+            );
+          })}
+
+          {/* Step / retaining-wall lines where ground level changes */}
+          {grid.map((cell, idx) => {
+            const row = Math.floor(idx / GRID_SIZE);
+            const col = idx % GRID_SIZE;
+            const lines = [];
+            if (col < GRID_SIZE - 1) {
+              const right = grid[idx + 1];
+              if (right.level !== cell.level) {
+                const w = 1 + Math.abs(right.level - cell.level);
+                lines.push(<line key="r" x1={(col + 1) * CELL} y1={row * CELL} x2={(col + 1) * CELL} y2={(row + 1) * CELL} stroke="#1f2937" strokeWidth={w} />);
+              }
+            }
+            if (row < GRID_SIZE - 1) {
+              const below = grid[idx + GRID_SIZE];
+              if (below.level !== cell.level) {
+                const w = 1 + Math.abs(below.level - cell.level);
+                lines.push(<line key="b" x1={col * CELL} y1={(row + 1) * CELL} x2={(col + 1) * CELL} y2={(row + 1) * CELL} stroke="#1f2937" strokeWidth={w} />);
+              }
+            }
+            return lines.length ? <g key={`step-${idx}`}>{lines}</g> : null;
+          })}
+
+          {/* Active layer icons, rendered smallest-size-first so larger items sit on top */}
+          {activeLayer >= 0 && [1, 2, 3].map(sz => (
+            <g key={`sizepass-${sz}`}>
+              {grid.map((cell, idx) => {
+                const feature = cell.f[activeLayer];
+                if (!feature || (feature.size || 1) !== sz) return null;
+                const row = Math.floor(idx / GRID_SIZE);
+                const col = idx % GRID_SIZE;
+                const x0 = col * CELL, y0 = row * CELL;
+                const cx = x0 + CELL / 2, cy = y0 + CELL / 2;
+                const fontSize = CELL * 0.85 * sz;
+                const yOffset = CELL * 0.32 * sz;
+                const elements = [];
+                if (feature.chip !== "none") {
+                  const chipColor = CHIP_COLORS.find(c => c.key === feature.chip)?.color || "transparent";
+                  elements.push(<circle key="chip" cx={cx} cy={cy} r={CELL * 0.42 * sz} fill={chipColor} />);
+                }
+                elements.push(
+                  <text key="icon" x={cx} y={cy + yOffset} textAnchor="middle" fontSize={fontSize}>{feature.icon}</text>
+                );
+                return <g key={idx}>{elements}</g>;
+              })}
+            </g>
+          ))}
+
+          {/* Indicator dots for other layers' content */}
+          {grid.map((cell, idx) => {
+            const row = Math.floor(idx / GRID_SIZE);
+            const col = idx % GRID_SIZE;
+            const x0 = col * CELL, y0 = row * CELL;
+            const dots = [];
+
+            if (activeLayer >= 0) {
+              for (let l = 0; l < 4; l++) {
+                if (l === activeLayer) continue;
+                if (cell.f[l]) {
+                  const c = CORNER[l];
+                  dots.push(<circle key={`dot-${l}`} cx={x0 + CELL * c.dx} cy={y0 + CELL * c.dy} r={1.4} fill="#e2e8f0" opacity={0.85} />);
+                }
+              }
+            } else {
+              for (let l = 0; l < 4; l++) {
+                if (cell.f[l]) {
+                  const c = CORNER[l];
+                  dots.push(<circle key={`dot-${l}`} cx={x0 + CELL * c.dx} cy={y0 + CELL * c.dy} r={1.4} fill="#fbbf24" opacity={0.9} />);
+                }
+              }
+            }
+            return dots.length ? <g key={`dots-${idx}`}>{dots}</g> : null;
+          })}
+
+          {/* Grid major lines every 1m (2 cells) */}
+          {Array.from({ length: GRID_SIZE / 2 + 1 }, (_, i) => i * 2 * CELL).map(pos => (
+            <g key={`maj-${pos}`}>
+              <line x1={pos} y1={0} x2={pos} y2={VB} stroke="#00000044" strokeWidth={0.8} />
+              <line x1={0} y1={pos} x2={VB} y2={pos} stroke="#00000044" strokeWidth={0.8} />
+            </g>
+          ))}
+        </svg>
+      </div>
+
+      {/* Legend for current layer */}
+      <div style={{ fontSize: 9, color: "#64748b", textAlign: "center", maxWidth: 380 }}>
+        {activeLayer === -1
+          ? "Pick a level + material, then drag to paint. Lighter tint = higher ground; dark lines mark steps/retaining walls between levels. Amber dots = features above."
+          : "Drag to place icons on this height level (relative to that cell's ground). Larger sizes overflow into neighbouring cells — erase from the centre cell. White dots = other levels have content here."}
+      </div>
+
+      {/* Save / clear controls */}
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
+        <span style={{ fontSize: 9, color: saveState === "saved" ? "#34d399" : "#64748b" }}>
+          {saveState === "saving" ? "Saving…" : saveState === "saved" ? "✓ Saved to this browser" : ""}
+        </span>
+        <button onClick={clearLayer} style={{
+          background: "transparent", color: "#94a3b8", border: "1px solid #1e3a5f",
+          borderRadius: 6, padding: "6px 12px", fontSize: 10, cursor: "pointer", fontFamily: "monospace",
+        }}>Clear this layer</button>
+
+        {!confirmClear ? (
+          <button onClick={() => setConfirmClear(true)} style={{
+            background: "transparent", color: "#f87171", border: "1px solid #7f1d1d",
+            borderRadius: 6, padding: "6px 12px", fontSize: 10, cursor: "pointer", fontFamily: "monospace",
+          }}>Clear everything</button>
+        ) : (
+          <span style={{ display: "flex", gap: 6 }}>
+            <span style={{ fontSize: 10, color: "#f87171", alignSelf: "center" }}>Sure?</span>
+            <button onClick={clearAll} style={{
+              background: "#ef4444", color: "#fff", border: "none",
+              borderRadius: 6, padding: "6px 12px", fontSize: 10, cursor: "pointer", fontFamily: "monospace",
+            }}>Yes</button>
+            <button onClick={() => setConfirmClear(false)} style={{
+              background: "transparent", color: "#94a3b8", border: "1px solid #1e3a5f",
+              borderRadius: 6, padding: "6px 12px", fontSize: 10, cursor: "pointer", fontFamily: "monospace",
+            }}>Cancel</button>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<GardenPlanner />);
+</script>
+</body>
+</html>

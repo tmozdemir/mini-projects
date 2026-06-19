@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Hangman — Two Player</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+
+  :root{
+    --bg:#0d1410;
+    --panel:#121c16;
+    --panel-2:#1a261e;
+    --line:#33453a;
+    --bone:#e8e4d8;
+    --dim:#7c8a7e;
+    --green:#5fd97a;
+    --green-dim:#1f3d28;
+    --red:#ff6b4a;
+    --red-dim:#3d1f1a;
+    --amber:#e8b84a;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    background:radial-gradient(ellipse at 50% 0%, #16241a 0%, var(--bg) 60%);
+    color:var(--bone);
+    font-family:'IBM Plex Mono', ui-monospace, monospace;
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:20px 14px;
+  }
+
+  .scope{ width:100%; max-width:480px; }
+
+  .crt-frame{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:18px;
+    box-shadow:
+      0 0 0 1px rgba(95,217,122,0.06),
+      0 30px 60px -20px rgba(0,0,0,0.6),
+      inset 0 1px 0 rgba(255,255,255,0.03);
+    overflow:hidden;
+  }
+
+  .statusbar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:14px 18px;
+    border-bottom:1px solid var(--line);
+    font-size:0.72rem;
+    letter-spacing:0.08em;
+    color:var(--dim);
+    text-transform:uppercase;
+  }
+  .statusbar .label{ display:flex; align-items:center; gap:8px; }
+  .dot-led{
+    width:7px; height:7px; border-radius:50%;
+    background:var(--green);
+    box-shadow:0 0 8px var(--green);
+    animation:pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+  .guesses-left{ font-weight:600; }
+  .guesses-left.low{ color:var(--red); }
+  .guesses-left.mid{ color:var(--amber); }
+  .guesses-left.high{ color:var(--green); }
+
+  .hidden{ display:none !important; }
+
+  /* ---------- Setup screen ---------- */
+  .screen{ padding:30px 24px; }
+  .screen-title{
+    font-size:0.66rem;
+    letter-spacing:0.13em;
+    color:var(--dim);
+    text-transform:uppercase;
+    margin-bottom:6px;
+    text-align:center;
+  }
+  .screen-sub{
+    font-size:0.8rem;
+    color:var(--dim);
+    text-align:center;
+    margin-bottom:26px;
+    line-height:1.5;
+  }
+  .word-input-row{
+    display:flex;
+    justify-content:center;
+    gap:7px;
+    margin-bottom:10px;
+    flex-wrap:wrap;
+  }
+  .letter-box{
+    width:38px; height:46px;
+    border:1px solid var(--line);
+    border-radius:8px;
+    background:var(--panel-2);
+    color:var(--green);
+    font-family:inherit;
+    font-size:1.3rem;
+    font-weight:700;
+    text-align:center;
+    text-transform:uppercase;
+  }
+  .letter-box:focus{ outline:2px solid var(--green); outline-offset:1px; }
+  .letter-box.filled{ border-color:var(--green); }
+
+  .setup-meta{
+    text-align:center;
+    font-size:0.74rem;
+    color:var(--dim);
+    margin-bottom:22px;
+    min-height:1.2em;
+  }
+  .setup-meta.warn{ color:var(--red); }
+
+  .primary-btn{
+    width:100%;
+    font-family:inherit;
+    font-weight:700;
+    font-size:0.85rem;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    padding:15px 0;
+    border-radius:10px;
+    cursor:pointer;
+    border:1px solid var(--green);
+    background:var(--green-dim);
+    color:var(--green);
+  }
+  .primary-btn:disabled{ opacity:0.35; pointer-events:none; }
+
+  .handoff-icon{
+    text-align:center;
+    font-size:2.4rem;
+    margin-bottom:18px;
+  }
+
+  /* ---------- Game screen ---------- */
+  .gallows{
+    padding:24px 24px 10px;
+    display:flex;
+    justify-content:center;
+  }
+  .gallows svg{ width:130px; height:130px; }
+  .gallows-line{ stroke:var(--dim); stroke-width:3; fill:none; stroke-linecap:round; }
+  .gallows-figure{ stroke:var(--red); stroke-width:3; fill:none; stroke-linecap:round; opacity:0; transition:opacity .25s ease; }
+  .gallows-figure.show{ opacity:1; }
+
+  .word-display{
+    display:flex;
+    justify-content:center;
+    gap:8px;
+    flex-wrap:wrap;
+    padding:6px 18px 22px;
+  }
+  .word-slot{
+    width:34px;
+    text-align:center;
+    border-bottom:2px solid var(--line);
+    font-size:1.5rem;
+    font-weight:700;
+    color:var(--green);
+    padding-bottom:4px;
+    min-height:1.4em;
+  }
+  .word-slot.revealed{ border-color:var(--green); }
+
+  .guessed-letters{
+    display:flex;
+    justify-content:center;
+    gap:6px;
+    flex-wrap:wrap;
+    padding:0 18px 18px;
+    min-height:1.4em;
+  }
+  .guessed-chip{
+    font-size:0.78rem;
+    padding:4px 9px;
+    border-radius:6px;
+    border:1px solid var(--line);
+    color:var(--dim);
+  }
+  .guessed-chip.hit{ color:var(--green); border-color:var(--green); background:var(--green-dim); }
+  .guessed-chip.miss{ color:var(--red); border-color:var(--red); background:var(--red-dim); text-decoration:line-through; }
+
+  .keyboard{
+    display:grid;
+    grid-template-columns:repeat(7, 1fr);
+    gap:6px;
+    padding:6px 16px 16px;
+  }
+  .key-btn{
+    font-family:inherit;
+    font-weight:700;
+    font-size:0.8rem;
+    padding:11px 0;
+    border-radius:7px;
+    cursor:pointer;
+    border:1px solid var(--line);
+    background:var(--panel-2);
+    color:var(--bone);
+  }
+  .key-btn:active{ transform:scale(0.93); }
+  .key-btn.used{ pointer-events:none; opacity:0.3; }
+
+  .divider-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:2px 18px 14px;
+    color:var(--dim);
+    font-size:0.62rem;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+  }
+  .divider-row::before, .divider-row::after{
+    content:'';
+    flex:1;
+    height:1px;
+    background:var(--line);
+  }
+
+  .guess-word-row{
+    display:flex;
+    gap:8px;
+    padding:0 18px 20px;
+  }
+  .guess-word-input{
+    flex:1;
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    border-radius:8px;
+    color:var(--bone);
+    font-family:inherit;
+    font-size:0.9rem;
+    padding:11px 12px;
+    text-transform:uppercase;
+    letter-spacing:0.06em;
+  }
+  .guess-word-input:focus{ outline:2px solid var(--amber); outline-offset:1px; }
+  .guess-word-btn{
+    font-family:inherit;
+    font-weight:700;
+    font-size:0.72rem;
+    letter-spacing:0.05em;
+    text-transform:uppercase;
+    padding:0 16px;
+    border-radius:8px;
+    cursor:pointer;
+    border:1px solid var(--amber);
+    background:#3d2f12;
+    color:var(--amber);
+    white-space:nowrap;
+  }
+  .guess-word-btn:disabled{ opacity:0.35; pointer-events:none; }
+
+  .hint-text{
+    text-align:center;
+    font-size:0.66rem;
+    color:var(--dim);
+    padding:0 18px 18px;
+    letter-spacing:0.02em;
+  }
+
+  /* ---------- End screen ---------- */
+  .end-screen{ padding:40px 24px; text-align:center; }
+  .end-screen .big-icon{ font-size:2.6rem; margin-bottom:10px; }
+  .end-screen .result{
+    font-size:1.3rem;
+    font-weight:700;
+    margin-bottom:8px;
+  }
+  .end-screen .result.win{ color:var(--green); }
+  .end-screen .result.lose{ color:var(--red); }
+  .end-screen .reveal-word{
+    font-size:1.4rem;
+    font-weight:700;
+    letter-spacing:0.1em;
+    color:var(--bone);
+    margin-bottom:6px;
+  }
+  .end-screen .end-meta{
+    font-size:0.78rem;
+    color:var(--dim);
+    margin-bottom:26px;
+  }
+  .restart-btn{
+    background:var(--green-dim);
+    border:1px solid var(--green);
+    color:var(--green);
+    font-family:inherit;
+    font-weight:600;
+    font-size:0.85rem;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    padding:13px 26px;
+    border-radius:10px;
+    cursor:pointer;
+  }
+</style>
+</head>
+<body>
+
+<div class="scope">
+  <div class="crt-frame">
+
+    <div class="statusbar">
+      <div class="label"><a href="index.html" style="color:var(--dim); text-decoration:none;">&larr;</a> <span class="dot-led"></span> HANGMAN</div>
+      <div id="statusRight"></div>
+    </div>
+
+    <!-- SETUP SCREEN: player 1 sets the word -->
+    <div id="setupScreen" class="screen">
+      <div class="handoff-icon">✍️</div>
+      <div class="screen-title">Player 1 — Set the Word</div>
+      <div class="screen-sub">Type a secret word, 3–7 letters.<br>Player 2 shouldn't be looking!</div>
+      <div class="word-input-row" id="wordInputRow"></div>
+      <div class="setup-meta" id="setupMeta">&nbsp;</div>
+      <button class="primary-btn" id="confirmWordBtn" disabled>Lock in word</button>
+    </div>
+
+    <!-- HANDOFF SCREEN -->
+    <div id="handoffScreen" class="screen hidden">
+      <div class="handoff-icon">🙈</div>
+      <div class="screen-title">Word Locked In</div>
+      <div class="screen-sub">Pass the device to Player 2.<br>They get 12 unique letter guesses — plus they can guess the whole word at any time.</div>
+      <button class="primary-btn" id="startGuessingBtn">Player 2 ready — start guessing</button>
+    </div>
+
+    <!-- GAME SCREEN -->
+    <div id="gameScreen" class="hidden">
+      <div class="gallows">
+        <svg viewBox="0 0 100 100">
+          <path class="gallows-line" d="M10,95 L60,95"/>
+          <path class="gallows-line" d="M25,95 L25,10"/>
+          <path class="gallows-line" d="M25,10 L65,10"/>
+          <path class="gallows-line" d="M65,10 L65,22"/>
+          <circle class="gallows-figure" id="figHead" cx="65" cy="32" r="9"/>
+          <path class="gallows-figure" id="figBody" d="M65,41 L65,65"/>
+          <path class="gallows-figure" id="figArmL" d="M65,48 L54,58"/>
+          <path class="gallows-figure" id="figArmR" d="M65,48 L76,58"/>
+          <path class="gallows-figure" id="figLegL" d="M65,65 L55,80"/>
+          <path class="gallows-figure" id="figLegR" d="M65,65 L75,80"/>
+        </svg>
+      </div>
+
+      <div class="word-display" id="wordDisplay"></div>
+      <div class="guessed-letters" id="guessedLetters"></div>
+
+      <div class="keyboard" id="keyboard"></div>
+
+      <div class="divider-row">or guess the whole word</div>
+
+      <div class="guess-word-row">
+        <input class="guess-word-input" id="guessWordInput" maxlength="7" placeholder="Type full word…" autocomplete="off" autocapitalize="characters">
+        <button class="guess-word-btn" id="guessWordBtn">Guess</button>
+      </div>
+      <div class="hint-text">A wrong full-word guess costs one of the 12 guesses</div>
+    </div>
+
+    <!-- END SCREEN -->
+    <div id="endScreen" class="end-screen hidden">
+      <div class="big-icon" id="endIcon">🎉</div>
+      <div class="result" id="endResult">PLAYER 2 WINS</div>
+      <div class="reveal-word" id="endWord">SIGNAL</div>
+      <div class="end-meta" id="endMeta">Solved with 4 guesses to spare</div>
+      <button class="restart-btn" id="playAgainBtn">New round</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const MAX_LETTER_BOXES = 7;
+const MAX_GUESSES = 12;
+
+const els = {
+  statusRight: document.getElementById('statusRight'),
+  setupScreen: document.getElementById('setupScreen'),
+  handoffScreen: document.getElementById('handoffScreen'),
+  gameScreen: document.getElementById('gameScreen'),
+  endScreen: document.getElementById('endScreen'),
+  wordInputRow: document.getElementById('wordInputRow'),
+  setupMeta: document.getElementById('setupMeta'),
+  confirmWordBtn: document.getElementById('confirmWordBtn'),
+  startGuessingBtn: document.getElementById('startGuessingBtn'),
+  wordDisplay: document.getElementById('wordDisplay'),
+  guessedLetters: document.getElementById('guessedLetters'),
+  keyboard: document.getElementById('keyboard'),
+  guessWordInput: document.getElementById('guessWordInput'),
+  guessWordBtn: document.getElementById('guessWordBtn'),
+  endIcon: document.getElementById('endIcon'),
+  endResult: document.getElementById('endResult'),
+  endWord: document.getElementById('endWord'),
+  endMeta: document.getElementById('endMeta'),
+  playAgainBtn: document.getElementById('playAgainBtn'),
+};
+
+let secretWord = '';
+let revealed = []; // booleans per letter
+let guessedSet = new Set(); // unique letters guessed (correct or incorrect)
+let guessLog = []; // {letter, hit} in order, for chip display
+let guessesUsed = 0;
+let gameOver = false;
+
+/* ---------- Setup: build letter boxes ---------- */
+function buildWordInputs(){
+  els.wordInputRow.innerHTML = '';
+  for (let i = 0; i < MAX_LETTER_BOXES; i++){
+    const box = document.createElement('input');
+    box.className = 'letter-box';
+    box.maxLength = 1;
+    box.dataset.idx = i;
+    box.autocomplete = 'off';
+    box.addEventListener('input', onBoxInput);
+    box.addEventListener('keydown', onBoxKeydown);
+    els.wordInputRow.appendChild(box);
+  }
+}
+buildWordInputs();
+
+function onBoxInput(e){
+  const val = e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(-1);
+  e.target.value = val;
+  e.target.classList.toggle('filled', !!val);
+  if (val){
+    const next = els.wordInputRow.children[+e.target.dataset.idx + 1];
+    if (next) next.focus();
+  }
+  validateSetup();
+}
+function onBoxKeydown(e){
+  if (e.key === 'Backspace' && !e.target.value){
+    const prev = els.wordInputRow.children[+e.target.dataset.idx - 1];
+    if (prev){ prev.focus(); }
+  }
+}
+function validateSetup(){
+  const boxes = [...els.wordInputRow.children];
+  const filled = boxes.filter(b => b.value).length;
+  // word must be contiguous from the start
+  let contiguous = true;
+  let seenEmpty = false;
+  boxes.forEach(b=>{
+    if (!b.value) seenEmpty = true;
+    else if (seenEmpty) contiguous = false;
+  });
+  const ok = contiguous && filled >= 3;
+  els.confirmWordBtn.disabled = !ok;
+  if (filled === 0){
+    els.setupMeta.textContent = '\u00A0';
+    els.setupMeta.classList.remove('warn');
+  } else if (!contiguous){
+    els.setupMeta.textContent = 'Fill letters from left to right, no gaps';
+    els.setupMeta.classList.add('warn');
+  } else if (filled < 3){
+    els.setupMeta.textContent = `${filled} letter${filled===1?'':'s'} — minimum 3`;
+    els.setupMeta.classList.add('warn');
+  } else {
+    els.setupMeta.textContent = `${filled} letter word — ready`;
+    els.setupMeta.classList.remove('warn');
+  }
+}
+
+els.confirmWordBtn.addEventListener('click', ()=>{
+  const boxes = [...els.wordInputRow.children];
+  secretWord = boxes.map(b=>b.value).join('').toUpperCase();
+  els.setupScreen.classList.add('hidden');
+  els.handoffScreen.classList.remove('hidden');
+});
+
+els.startGuessingBtn.addEventListener('click', ()=>{
+  els.handoffScreen.classList.add('hidden');
+  els.gameScreen.classList.remove('hidden');
+  beginGuessingPhase();
+});
+
+/* ---------- Guessing phase ---------- */
+function beginGuessingPhase(){
+  revealed = secretWord.split('').map(()=> false);
+  guessedSet = new Set();
+  guessLog = [];
+  guessesUsed = 0;
+  gameOver = false;
+  renderWord();
+  renderGuessed();
+  renderKeyboard();
+  updateStatus();
+  els.guessWordInput.value = '';
+  els.guessWordInput.disabled = false;
+  els.guessWordBtn.disabled = false;
+}
+
+function renderWord(){
+  els.wordDisplay.innerHTML = '';
+  secretWord.split('').forEach((ch, i)=>{
+    const slot = document.createElement('div');
+    slot.className = 'word-slot' + (revealed[i] ? ' revealed' : '');
+    slot.textContent = revealed[i] ? ch : '';
+    els.wordDisplay.appendChild(slot);
+  });
+}
+
+function renderGuessed(){
+  els.guessedLetters.innerHTML = '';
+  guessLog.forEach(g=>{
+    const chip = document.createElement('span');
+    chip.className = 'guessed-chip ' + (g.hit ? 'hit' : 'miss');
+    chip.textContent = g.letter;
+    els.guessedLetters.appendChild(chip);
+  });
+}
+
+function renderKeyboard(){
+  els.keyboard.innerHTML = '';
+  const rows = 'QWERTYUIOPASDFGHJKLZXCVBNM';
+  rows.split('').forEach(letter=>{
+    const btn = document.createElement('button');
+    btn.className = 'key-btn';
+    btn.textContent = letter;
+    if (guessedSet.has(letter)) btn.classList.add('used');
+    btn.addEventListener('click', ()=> guessLetter(letter));
+    els.keyboard.appendChild(btn);
+  });
+}
+
+function updateStatus(){
+  const left = MAX_GUESSES - guessesUsed;
+  const cls = left <= 3 ? 'low' : (left <= 6 ? 'mid' : 'high');
+  els.statusRight.innerHTML = `<span class="guesses-left ${cls}">${left}</span> guesses left`;
+}
+
+function guessLetter(letter){
+  if (gameOver || guessedSet.has(letter)) return;
+  guessedSet.add(letter);
+
+  const hit = secretWord.includes(letter);
+  if (hit){
+    secretWord.split('').forEach((ch,i)=>{ if (ch === letter) revealed[i] = true; });
+  } else {
+    guessesUsed++;
+  }
+  guessLog.push({letter, hit});
+
+  renderWord();
+  renderGuessed();
+  renderKeyboard();
+  updateStatus();
+  checkGameEnd();
+}
+
+function guessFullWord(){
+  if (gameOver) return;
+  const attempt = els.guessWordInput.value.trim().toUpperCase();
+  if (!attempt) return;
+
+  if (attempt === secretWord){
+    revealed = revealed.map(()=> true);
+    renderWord();
+    endGame(true);
+  } else {
+    guessesUsed++;
+    updateStatus();
+    els.guessWordInput.value = '';
+    els.guessWordInput.placeholder = 'Not it — try again…';
+    checkGameEnd();
+  }
+}
+els.guessWordBtn.addEventListener('click', guessFullWord);
+els.guessWordInput.addEventListener('keydown', e=>{
+  if (e.key === 'Enter') guessFullWord();
+});
+
+function checkGameEnd(){
+  if (revealed.every(r => r)){
+    endGame(true);
+    return;
+  }
+  if (guessesUsed >= MAX_GUESSES){
+    endGame(false);
+  }
+}
+
+function endGame(won){
+  gameOver = true;
+  els.guessWordInput.disabled = true;
+  els.guessWordBtn.disabled = true;
+
+  setTimeout(()=>{
+    els.gameScreen.classList.add('hidden');
+    els.endScreen.classList.remove('hidden');
+    els.endWord.textContent = secretWord;
+
+    if (won){
+      els.endIcon.textContent = '🎉';
+      els.endResult.textContent = 'PLAYER 2 WINS';
+      els.endResult.className = 'result win';
+      const left = MAX_GUESSES - guessesUsed;
+      els.endMeta.textContent = `Solved with ${left} guess${left===1?'':'es'} to spare`;
+    } else {
+      els.endIcon.textContent = '💀';
+      els.endResult.textContent = 'PLAYER 1 WINS';
+      els.endResult.className = 'result lose';
+      els.endMeta.textContent = 'All 12 guesses used';
+    }
+  }, won ? 500 : 700);
+}
+
+els.playAgainBtn.addEventListener('click', ()=>{
+  secretWord = '';
+  buildWordInputs();
+  validateSetup();
+  els.endScreen.classList.add('hidden');
+  els.setupScreen.classList.remove('hidden');
+  els.statusRight.innerHTML = '';
+  figureParts.forEach(id => document.getElementById(id).classList.remove('show'));
+});
+
+// gallows figure reveal tied to guesses used (visual tension, not exact 12-step rig)
+const figureParts = ['figHead','figBody','figArmL','figArmR','figLegL','figLegR'];
+const origGuessLetter = guessLetter;
+function updateGallows(){
+  const fractionWrong = guessesUsed / MAX_GUESSES;
+  const partsToShow = Math.min(figureParts.length, Math.ceil(fractionWrong * figureParts.length));
+  figureParts.forEach((id, i)=>{
+    document.getElementById(id).classList.toggle('show', i < partsToShow);
+  });
+}
+// hook into the existing flow without restructuring
+const _origGuessLetterFn = guessLetter;
+guessLetter = function(letter){
+  _origGuessLetterFn(letter);
+  updateGallows();
+};
+const _origGuessFullWordFn = guessFullWord;
+guessFullWord = function(){
+  _origGuessFullWordFn();
+  updateGallows();
+};
+</script>
+
+</body>
+</html>

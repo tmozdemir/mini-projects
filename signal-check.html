@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Signal Check — Morse &amp; NATO Trainer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap');
+
+  :root{
+    --bg:#0d1410;
+    --panel:#121c16;
+    --panel-2:#1a261e;
+    --line:#33453a;
+    --bone:#e8e4d8;
+    --dim:#7c8a7e;
+    --green:#5fd97a;
+    --green-dim:#1f3d28;
+    --red:#ff6b4a;
+    --red-dim:#3d1f1a;
+    --amber:#e8b84a;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    background:
+      radial-gradient(ellipse at 50% 0%, #16241a 0%, var(--bg) 60%);
+    color:var(--bone);
+    font-family:'IBM Plex Mono', ui-monospace, monospace;
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:20px 14px;
+  }
+
+  .scope{ width:100%; max-width:480px; }
+
+  .crt-frame{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:18px;
+    box-shadow:
+      0 0 0 1px rgba(95,217,122,0.06),
+      0 30px 60px -20px rgba(0,0,0,0.6),
+      inset 0 1px 0 rgba(255,255,255,0.03);
+    overflow:hidden;
+  }
+
+  .statusbar{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:14px 18px;
+    border-bottom:1px solid var(--line);
+    font-size:0.72rem;
+    letter-spacing:0.08em;
+    color:var(--dim);
+    text-transform:uppercase;
+  }
+  .statusbar .label{ display:flex; align-items:center; gap:8px; }
+  .dot-led{
+    width:7px; height:7px; border-radius:50%;
+    background:var(--green);
+    box-shadow:0 0 8px var(--green);
+    animation:pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+  .streak{ color:var(--amber); font-weight:600; }
+  .score{ color:var(--bone); font-weight:600; }
+
+  .modebar{ display:flex; border-bottom:1px solid var(--line); }
+  .modebtn{
+    flex:1;
+    background:none;
+    border:none;
+    color:var(--dim);
+    font-family:inherit;
+    font-size:0.64rem;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    padding:11px 4px;
+    cursor:pointer;
+    border-bottom:2px solid transparent;
+    transition:color .15s ease, border-color .15s ease;
+    line-height:1.3;
+  }
+  .modebtn + .modebtn{ border-left:1px solid var(--line); }
+  .modebtn.active{
+    color:var(--green);
+    border-bottom:2px solid var(--green);
+    background:var(--green-dim);
+  }
+
+  .prompt-area{
+    padding:32px 24px 24px;
+    text-align:center;
+    border-bottom:1px solid var(--line);
+    position:relative;
+    min-height:128px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+  }
+  .prompt-kind{
+    font-size:0.64rem;
+    letter-spacing:0.13em;
+    color:var(--dim);
+    text-transform:uppercase;
+    margin-bottom:14px;
+  }
+  .prompt-main{
+    font-size:2.6rem;
+    font-weight:700;
+    letter-spacing:0.06em;
+    color:var(--green);
+    line-height:1;
+    min-height:1.2em;
+    word-break:break-word;
+  }
+  .prompt-main.is-morse{ font-size:2.1rem; letter-spacing:0.18em; }
+  .prompt-main.is-word{ font-size:2.2rem; letter-spacing:0.14em; }
+  .prompt-sub{
+    margin-top:10px;
+    font-size:0.78rem;
+    color:var(--dim);
+    min-height:1em;
+  }
+  .feedback-flash{
+    position:absolute; inset:0; pointer-events:none; opacity:0;
+    transition:opacity .25s ease;
+  }
+  .feedback-flash.show-correct{ opacity:1; background:radial-gradient(ellipse at center, rgba(95,217,122,0.14), transparent 70%); }
+  .feedback-flash.show-wrong{ opacity:1; background:radial-gradient(ellipse at center, rgba(255,107,74,0.16), transparent 70%); }
+
+  /* multiple choice grid (morse->letter, letter->morse) */
+  .answers{
+    display:grid;
+    grid-template-columns:repeat(2, 1fr);
+    gap:10px;
+    padding:18px;
+  }
+  .ans-btn{
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    color:var(--bone);
+    font-family:inherit;
+    font-size:0.95rem;
+    font-weight:600;
+    padding:16px 10px;
+    border-radius:10px;
+    cursor:pointer;
+    transition:transform .08s ease, border-color .15s ease, background .15s ease;
+    letter-spacing:0.02em;
+  }
+  .ans-btn:active{ transform:scale(0.97); }
+  .ans-btn:focus-visible{ outline:2px solid var(--green); outline-offset:2px; }
+  .ans-btn.correct{ background:var(--green-dim); border-color:var(--green); color:var(--green); }
+  .ans-btn.wrong{ background:var(--red-dim); border-color:var(--red); color:var(--red); }
+  .ans-btn.disabled{ pointer-events:none; opacity:0.55; }
+
+  /* nato recall grid - full 26 letter grid, smaller */
+  .nato-grid{
+    display:grid;
+    grid-template-columns:repeat(6, 1fr);
+    gap:7px;
+    padding:16px 18px;
+  }
+  .nato-btn{
+    background:var(--panel-2);
+    border:1px solid var(--line);
+    color:var(--bone);
+    font-family:inherit;
+    font-size:0.78rem;
+    font-weight:600;
+    padding:10px 2px;
+    border-radius:7px;
+    cursor:pointer;
+  }
+  .nato-btn:active{ transform:scale(0.95); }
+  .nato-btn.correct{ background:var(--green-dim); border-color:var(--green); color:var(--green); }
+  .nato-btn.wrong{ background:var(--red-dim); border-color:var(--red); color:var(--red); }
+  .nato-btn.disabled{ pointer-events:none; opacity:0.45; }
+
+  /* tap-out morse input mode */
+  .tapout{ padding:16px 18px 4px; }
+  .tapout-display{
+    background:#0a100c;
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:16px 14px;
+    min-height:64px;
+    display:flex;
+    flex-wrap:wrap;
+    align-content:center;
+    gap:6px;
+    font-size:1.3rem;
+    letter-spacing:0.1em;
+    color:var(--green);
+    margin-bottom:6px;
+  }
+  .tapout-display .letter-group{
+    display:inline-flex;
+    padding:2px 7px;
+    border-right:1px dashed var(--line);
+  }
+  .tapout-display .letter-group:last-child{ border-right:none; }
+  .tapout-display.empty::before{
+    content:'Tap dot / dash below to build your answer';
+    color:var(--dim);
+    font-size:0.78rem;
+    letter-spacing:0.02em;
+  }
+  .tapout-decoded{
+    text-align:center;
+    font-size:0.95rem;
+    color:var(--dim);
+    letter-spacing:0.16em;
+    min-height:1.4em;
+    margin-bottom:14px;
+  }
+  .tapout-decoded .filled{ color:var(--bone); }
+  .tapout-decoded .bad{ color:var(--red); }
+
+  .tap-row{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-bottom:10px;
+  }
+  .tap-btn{
+    font-family:inherit;
+    font-weight:700;
+    font-size:1.4rem;
+    padding:18px 0;
+    border-radius:10px;
+    cursor:pointer;
+    border:1px solid var(--line);
+    background:var(--panel-2);
+    color:var(--bone);
+  }
+  .tap-btn:active{ transform:scale(0.96); background:var(--green-dim); border-color:var(--green); }
+  .tap-btn.dash{ letter-spacing:0.2em; }
+
+  .tap-row-secondary{
+    display:grid;
+    grid-template-columns:1fr 1fr 1fr;
+    gap:8px;
+    margin-bottom:14px;
+  }
+  .tap-sec-btn{
+    font-family:inherit;
+    font-weight:600;
+    font-size:0.7rem;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    padding:11px 4px;
+    border-radius:8px;
+    cursor:pointer;
+    border:1px solid var(--line);
+    background:none;
+    color:var(--dim);
+  }
+  .tap-sec-btn:active{ background:var(--panel-2); }
+
+  .submit-btn{
+    width:100%;
+    font-family:inherit;
+    font-weight:700;
+    font-size:0.85rem;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    padding:15px 0;
+    border-radius:10px;
+    cursor:pointer;
+    border:1px solid var(--green);
+    background:var(--green-dim);
+    color:var(--green);
+    margin-bottom:16px;
+  }
+  .submit-btn:disabled{ opacity:0.4; pointer-events:none; }
+
+  .controls{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:12px 18px 18px;
+    gap:10px;
+  }
+  .ghost-btn{
+    background:none;
+    border:1px solid var(--line);
+    color:var(--dim);
+    font-family:inherit;
+    font-size:0.72rem;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    padding:9px 14px;
+    border-radius:8px;
+    cursor:pointer;
+  }
+  .ghost-btn:hover{ color:var(--bone); border-color:var(--dim); }
+
+  .sound-btn{
+    width:38px; height:38px;
+    border-radius:8px;
+    border:1px solid var(--line);
+    background:none;
+    color:var(--dim);
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    font-size:1rem;
+  }
+  .sound-btn.on{ color:var(--green); border-color:var(--green); }
+
+  .legend{
+    text-align:center;
+    font-size:0.68rem;
+    color:var(--dim);
+    margin-top:16px;
+    letter-spacing:0.04em;
+    line-height:1.6;
+  }
+
+  .end-screen{ padding:40px 24px; text-align:center; }
+  .end-screen .big{ font-size:2.4rem; font-weight:700; color:var(--green); margin-bottom:6px; }
+  .end-screen .verdict{ font-size:0.85rem; color:var(--dim); margin-bottom:24px; letter-spacing:0.02em; }
+  .restart-btn{
+    background:var(--green-dim);
+    border:1px solid var(--green);
+    color:var(--green);
+    font-family:inherit;
+    font-weight:600;
+    font-size:0.85rem;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    padding:13px 26px;
+    border-radius:10px;
+    cursor:pointer;
+  }
+  .hidden{ display:none !important; }
+</style>
+</head>
+<body>
+
+<div class="scope">
+  <div class="crt-frame">
+
+    <div class="statusbar">
+      <div class="label"><a href="index.html" style="color:var(--dim); text-decoration:none;">&larr;</a> <span class="dot-led"></span> SIGNAL CHECK</div>
+      <div><span class="score" id="scoreLabel">0</span> / <span id="totalLabel">10</span> &nbsp; <span class="streak" id="streakLabel"></span></div>
+    </div>
+
+    <div class="modebar">
+      <button class="modebtn active" data-mode="morse">Morse → Letter</button>
+      <button class="modebtn" data-mode="letter-morse">Letter → Morse</button>
+      <button class="modebtn" data-mode="nato">NATO Recall</button>
+      <button class="modebtn" data-mode="tapout">Tap It Out</button>
+    </div>
+
+    <div id="gameScreen">
+      <div class="prompt-area">
+        <div class="feedback-flash" id="flash"></div>
+        <div class="prompt-kind" id="promptKind">DECODE THIS SIGNAL</div>
+        <div class="prompt-main" id="promptMain">· — ·</div>
+        <div class="prompt-sub" id="promptSub"></div>
+      </div>
+
+      <div class="answers hidden" id="answers"></div>
+      <div class="nato-grid hidden" id="natoGrid"></div>
+
+      <div class="tapout hidden" id="tapoutArea">
+        <div class="tapout-display empty" id="tapoutDisplay"></div>
+        <div class="tapout-decoded" id="tapoutDecoded"></div>
+        <div class="tap-row">
+          <button class="tap-btn dot" id="dotBtn">·</button>
+          <button class="tap-btn dash" id="dashBtn">—</button>
+        </div>
+        <div class="tap-row-secondary">
+          <button class="tap-sec-btn" id="spaceBtn">Next letter</button>
+          <button class="tap-sec-btn" id="backBtn">⌫ Undo</button>
+          <button class="tap-sec-btn" id="clearBtn">Clear</button>
+        </div>
+        <button class="submit-btn" id="submitBtn">Submit</button>
+      </div>
+
+      <div class="controls">
+        <button class="ghost-btn" id="replayBtn">▶ Replay tone</button>
+        <button class="sound-btn on" id="soundToggle" title="Toggle sound">♪</button>
+        <button class="ghost-btn" id="restartTop">Restart</button>
+      </div>
+    </div>
+
+    <div id="endScreen" class="end-screen hidden">
+      <div class="big" id="finalScore">10/10</div>
+      <div class="verdict" id="verdict">SOLID COPY</div>
+      <button class="restart-btn" id="playAgainBtn">Run again</button>
+    </div>
+
+  </div>
+
+  <div class="legend" id="legendText">Tap ▶ to hear the tone again · sound uses your device speaker</div>
+</div>
+
+<script>
+/* ---------- Data ---------- */
+const MORSE = {
+  A:'.-', B:'-...', C:'-.-.', D:'-..', E:'.', F:'..-.', G:'--.', H:'....',
+  I:'..', J:'.---', K:'-.-', L:'.-..', M:'--', N:'-.', O:'---', P:'.--.',
+  Q:'--.-', R:'.-.', S:'...', T:'-', U:'..-', V:'...-', W:'.--', X:'-..-',
+  Y:'-.--', Z:'--..'
+};
+const REVERSE_MORSE = Object.fromEntries(Object.entries(MORSE).map(([k,v])=>[v,k]));
+const NATO = {
+  A:'Alfa', B:'Bravo', C:'Charlie', D:'Delta', E:'Echo', F:'Foxtrot', G:'Golf',
+  H:'Hotel', I:'India', J:'Juliett', K:'Kilo', L:'Lima', M:'Mike', N:'November',
+  O:'Oscar', P:'Papa', Q:'Quebec', R:'Romeo', S:'Sierra', T:'Tango', U:'Uniform',
+  V:'Victor', W:'Whiskey', X:'X-ray', Y:'Yankee', Z:'Zulu'
+};
+const LETTERS = Object.keys(MORSE);
+const FIVE_LETTER_WORDS = [
+  'RADIO','MORSE','CABLE','PULSE','RELAY','SPARK','TRACE',
+  'BEACH','TOWER','LIGHT','SOUTH','NORTH','OCEAN','RIVER','EARTH','PLANE','TRAIN',
+  'NIGHT','STORM','SOLID','SHARP','QUIET','BRAVE','CLEAR','SWIFT','GRAND','FRESH'
+];
+
+/* ---------- State ---------- */
+const TOTAL_ROUNDS = 10;
+let mode = 'morse';
+let round = 0;
+let score = 0;
+let streak = 0;
+let current = null;
+let locked = false;
+let soundOn = true;
+
+// tap-out state
+let tapLetters = [[]]; // array of arrays of symbols, one sub-array per letter
+let tapWordMode = false;
+let tapTarget = '';
+
+const els = {
+  promptKind: document.getElementById('promptKind'),
+  promptMain: document.getElementById('promptMain'),
+  promptSub: document.getElementById('promptSub'),
+  answers: document.getElementById('answers'),
+  natoGrid: document.getElementById('natoGrid'),
+  tapoutArea: document.getElementById('tapoutArea'),
+  tapoutDisplay: document.getElementById('tapoutDisplay'),
+  tapoutDecoded: document.getElementById('tapoutDecoded'),
+  scoreLabel: document.getElementById('scoreLabel'),
+  totalLabel: document.getElementById('totalLabel'),
+  streakLabel: document.getElementById('streakLabel'),
+  flash: document.getElementById('flash'),
+  gameScreen: document.getElementById('gameScreen'),
+  endScreen: document.getElementById('endScreen'),
+  finalScore: document.getElementById('finalScore'),
+  verdict: document.getElementById('verdict'),
+  controls: document.querySelector('.controls'),
+};
+
+els.totalLabel.textContent = TOTAL_ROUNDS;
+
+/* ---------- Audio ---------- */
+let audioCtx = null;
+function ctx(){
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+function beep(durationMs){
+  return new Promise(resolve=>{
+    if (!soundOn){ setTimeout(resolve, durationMs); return; }
+    const c = ctx();
+    const osc = c.createOscillator();
+    const gain = c.createGain();
+    osc.frequency.value = 620;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0, c.currentTime);
+    gain.gain.linearRampToValueAtTime(0.18, c.currentTime + 0.008);
+    gain.gain.setValueAtTime(0.18, c.currentTime + durationMs/1000 - 0.012);
+    gain.gain.linearRampToValueAtTime(0, c.currentTime + durationMs/1000);
+    osc.connect(gain).connect(c.destination);
+    osc.start();
+    osc.stop(c.currentTime + durationMs/1000 + 0.01);
+    setTimeout(resolve, durationMs);
+  });
+}
+function tapClick(isDash){
+  if (!soundOn) return;
+  const c = ctx();
+  const osc = c.createOscillator();
+  const gain = c.createGain();
+  osc.frequency.value = isDash ? 480 : 720;
+  osc.type = 'square';
+  gain.gain.setValueAtTime(0.1, c.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.06);
+  osc.connect(gain).connect(c.destination);
+  osc.start();
+  osc.stop(c.currentTime + 0.07);
+}
+async function playMorse(code){
+  const unit = 110;
+  for (const sym of code){
+    if (sym === '.'){ await beep(unit); }
+    else { await beep(unit*3); }
+    await new Promise(r=>setTimeout(r, unit));
+  }
+}
+async function playWordMorse(word){
+  for (const ch of word){
+    await playMorse(MORSE[ch]);
+    await new Promise(r=>setTimeout(r, 220));
+  }
+}
+function chime(success){
+  if (!soundOn) return;
+  const c = ctx();
+  const freqs = success ? [660, 880] : [220, 165];
+  freqs.forEach((f,i)=>{
+    const osc = c.createOscillator();
+    const gain = c.createGain();
+    osc.frequency.value = f;
+    osc.type = success ? 'sine' : 'sawtooth';
+    const start = c.currentTime + i*0.09;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.14, start + 0.01);
+    gain.gain.linearRampToValueAtTime(0, start + 0.18);
+    osc.connect(gain).connect(c.destination);
+    osc.start(start);
+    osc.stop(start + 0.2);
+  });
+}
+
+/* ---------- Helpers ---------- */
+function pickLetter(){ return LETTERS[Math.floor(Math.random()*LETTERS.length)]; }
+function sampleOptions(correct, pool, count){
+  const opts = new Set([correct]);
+  while (opts.size < count) opts.add(pool[Math.floor(Math.random()*pool.length)]);
+  return shuffle([...opts]);
+}
+function shuffle(arr){
+  for (let i = arr.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i+1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+function showPanel(panel){
+  els.answers.classList.add('hidden');
+  els.natoGrid.classList.add('hidden');
+  els.tapoutArea.classList.add('hidden');
+  els.controls.classList.remove('hidden');
+  panel.classList.remove('hidden');
+}
+
+/* ---------- Round setup ---------- */
+function newRound(){
+  if (round >= TOTAL_ROUNDS){ endGame(); return; }
+  locked = false;
+  els.flash.className = 'feedback-flash';
+
+  if (mode === 'morse'){
+    const letter = pickLetter();
+    current = { answer: letter };
+    els.promptKind.textContent = 'DECODE THIS SIGNAL — WHICH LETTER?';
+    els.promptMain.className = 'prompt-main is-morse';
+    els.promptMain.textContent = MORSE[letter];
+    els.promptSub.textContent = '';
+    showPanel(els.answers);
+    renderChoiceGrid(els.answers, letter, LETTERS, l => l, 4, 'ans-btn');
+    setTimeout(()=> playMorse(MORSE[letter]), 350);
+  }
+  else if (mode === 'letter-morse'){
+    const letter = pickLetter();
+    current = { answer: MORSE[letter] };
+    els.promptKind.textContent = 'SEND THIS LETTER — PICK THE CODE';
+    els.promptMain.className = 'prompt-main';
+    els.promptMain.textContent = letter;
+    els.promptSub.textContent = '';
+    showPanel(els.answers);
+    const distractMorse = LETTERS.map(l=>MORSE[l]);
+    renderChoiceGrid(els.answers, MORSE[letter], distractMorse, m => m, 4, 'ans-btn');
+  }
+  else if (mode === 'nato'){
+    const letter = pickLetter();
+    current = { answer: NATO[letter] };
+    els.promptKind.textContent = 'RECALL THE CALL SIGN FOR THIS LETTER';
+    els.promptMain.className = 'prompt-main';
+    els.promptMain.textContent = letter;
+    els.promptSub.textContent = 'All 26 words shown — no narrowing it down this time';
+    showPanel(els.natoGrid);
+    renderNatoGrid(NATO[letter]);
+  }
+  else if (mode === 'tapout'){
+    tapWordMode = Math.random() < 0.5;
+    if (tapWordMode){
+      tapTarget = FIVE_LETTER_WORDS[Math.floor(Math.random()*FIVE_LETTER_WORDS.length)];
+      els.promptKind.textContent = 'TAP OUT THIS WORD IN MORSE';
+      els.promptMain.className = 'prompt-main is-word';
+      els.promptMain.textContent = tapTarget;
+      els.promptSub.textContent = `${tapTarget.length} letters — use "Next letter" between each`;
+    } else {
+      tapTarget = pickLetter();
+      els.promptKind.textContent = 'TAP OUT THIS LETTER IN MORSE';
+      els.promptMain.className = 'prompt-main';
+      els.promptMain.textContent = tapTarget;
+      els.promptSub.textContent = '';
+    }
+    current = { answer: tapTarget };
+    tapLetters = [[]];
+    showPanel(els.tapoutArea);
+    renderTapout();
+  }
+
+  round++;
+  updateStatus();
+}
+
+function renderChoiceGrid(container, correctValue, pool, displayFn, count, cls){
+  const options = sampleOptions(correctValue, pool, count);
+  container.innerHTML = '';
+  options.forEach(val=>{
+    const btn = document.createElement('button');
+    btn.className = cls;
+    btn.textContent = displayFn(val);
+    btn.addEventListener('click', ()=> resolveAnswer(val === correctValue, btn, correctValue, container));
+    container.appendChild(btn);
+  });
+}
+
+function renderNatoGrid(correctWord){
+  els.natoGrid.innerHTML = '';
+  const allWords = shuffle(LETTERS.map(l => NATO[l]));
+  allWords.forEach(word=>{
+    const btn = document.createElement('button');
+    btn.className = 'nato-btn';
+    btn.textContent = word;
+    btn.addEventListener('click', ()=> resolveAnswer(word === correctWord, btn, correctWord, els.natoGrid));
+    els.natoGrid.appendChild(btn);
+  });
+}
+
+function resolveAnswer(isCorrect, btn, correctValue, container){
+  if (locked) return;
+  locked = true;
+
+  [...container.children].forEach(b=>{
+    b.classList.add('disabled');
+    if (b.textContent === String(correctValue)) b.classList.add('correct');
+  });
+  if (!isCorrect) btn.classList.add('wrong');
+
+  registerResult(isCorrect);
+  setTimeout(newRound, isCorrect ? 850 : 1200);
+}
+
+/* ---------- Tap-out mode ---------- */
+function renderTapout(){
+  const display = els.tapoutDisplay;
+  const flatEmpty = tapLetters.every(l => l.length === 0);
+  display.classList.toggle('empty', flatEmpty);
+  display.innerHTML = '';
+  tapLetters.forEach(letterSyms=>{
+    const span = document.createElement('span');
+    span.className = 'letter-group';
+    span.textContent = letterSyms.join(' ') || '\u00A0';
+    display.appendChild(span);
+  });
+
+  const decoded = tapLetters.map(syms=>{
+    const code = syms.join('');
+    if (!code) return '';
+    return REVERSE_MORSE[code] || '?';
+  });
+  const decodedStr = decoded.join('');
+  els.tapoutDecoded.innerHTML = decodedStr
+    ? `→ <span class="${decodedStr.includes('?') ? 'bad' : 'filled'}">${decodedStr}</span>`
+    : '';
+
+  document.getElementById('submitBtn').disabled = decoded.join('').length === 0;
+}
+
+function tapAdd(sym){
+  tapClick(sym === '-');
+  const last = tapLetters[tapLetters.length - 1];
+  last.push(sym);
+  renderTapout();
+}
+function tapNextLetter(){
+  const last = tapLetters[tapLetters.length - 1];
+  if (last.length === 0) return;
+  tapLetters.push([]);
+  renderTapout();
+}
+function tapUndo(){
+  const last = tapLetters[tapLetters.length - 1];
+  if (last.length > 0){
+    last.pop();
+  } else if (tapLetters.length > 1){
+    tapLetters.pop();
+  }
+  renderTapout();
+}
+function tapClear(){
+  tapLetters = [[]];
+  renderTapout();
+}
+function tapSubmit(){
+  if (locked) return;
+  locked = true;
+
+  const decodedLetters = tapLetters
+    .filter(syms => syms.length > 0)
+    .map(syms => REVERSE_MORSE[syms.join('')] || '?');
+  const guess = decodedLetters.join('');
+  const isCorrect = guess === tapTarget;
+
+  els.tapoutDecoded.innerHTML = `→ <span class="${isCorrect ? 'filled' : 'bad'}">${guess || '(empty)'}</span>` +
+    (isCorrect ? '' : ` <span class="bad">— target was ${tapTarget}</span>`);
+
+  registerResult(isCorrect);
+  setTimeout(newRound, isCorrect ? 900 : 1500);
+}
+
+document.getElementById('dotBtn').addEventListener('click', ()=> tapAdd('.'));
+document.getElementById('dashBtn').addEventListener('click', ()=> tapAdd('-'));
+document.getElementById('spaceBtn').addEventListener('click', tapNextLetter);
+document.getElementById('backBtn').addEventListener('click', tapUndo);
+document.getElementById('clearBtn').addEventListener('click', tapClear);
+document.getElementById('submitBtn').addEventListener('click', tapSubmit);
+
+/* ---------- Shared result handling ---------- */
+function registerResult(isCorrect){
+  if (isCorrect){
+    score++;
+    streak++;
+    els.flash.classList.add('show-correct');
+    chime(true);
+  } else {
+    streak = 0;
+    els.flash.classList.add('show-wrong');
+    chime(false);
+  }
+  updateStatus();
+}
+
+document.getElementById('replayBtn').addEventListener('click', ()=>{
+  if (!current) return;
+  if (mode === 'morse'){
+    playMorse(els.promptMain.textContent);
+  } else if (mode === 'letter-morse'){
+    playMorse(current.answer);
+  } else if (mode === 'tapout'){
+    if (tapWordMode) playWordMorse(tapTarget); else playMorse(MORSE[tapTarget]);
+  }
+});
+
+document.getElementById('soundToggle').addEventListener('click', function(){
+  soundOn = !soundOn;
+  this.classList.toggle('on', soundOn);
+  this.textContent = soundOn ? '♪' : '✕';
+});
+
+function updateStatus(){
+  els.scoreLabel.textContent = score;
+  els.streakLabel.textContent = streak > 1 ? `STREAK ${streak}` : '';
+}
+
+function endGame(){
+  els.gameScreen.classList.add('hidden');
+  els.endScreen.classList.remove('hidden');
+  els.finalScore.textContent = `${score}/${TOTAL_ROUNDS}`;
+  let verdict;
+  if (score === TOTAL_ROUNDS) verdict = 'PERFECT COPY — RATED OPERATOR';
+  else if (score >= TOTAL_ROUNDS*0.8) verdict = 'SOLID COPY';
+  else if (score >= TOTAL_ROUNDS*0.5) verdict = 'READABLE, SOME NOISE';
+  else verdict = 'SIGNAL LOST — RUN IT BACK';
+  els.verdict.textContent = verdict;
+}
+
+function startGame(){
+  round = 0; score = 0; streak = 0;
+  els.endScreen.classList.add('hidden');
+  els.gameScreen.classList.remove('hidden');
+  newRound();
+}
+
+document.getElementById('playAgainBtn').addEventListener('click', startGame);
+document.getElementById('restartTop').addEventListener('click', startGame);
+
+document.querySelectorAll('.modebtn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.modebtn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    mode = btn.dataset.mode;
+    startGame();
+  });
+});
+
+startGame();
+</script>
+
+</body>
+</html>

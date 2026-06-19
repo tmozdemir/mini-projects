@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>My Console</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: #0a0e1a;
+    font-family: 'SF Mono', 'Fira Mono', monospace;
+    color: #94a3b8;
+  }
+  .wrap {
+    max-width: 480px; margin: 0 auto;
+    padding: 32px 16px 48px; display: flex; flex-direction: column; gap: 20px;
+  }
+  .eyebrow {
+    font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: #0ea5e9; text-align: center;
+  }
+  .title {
+    font-size: 22px; font-weight: 700; color: #e2e8f0;
+    letter-spacing: -0.02em; text-align: center;
+  }
+  .subtitle {
+    font-size: 11px; color: #64748b; text-align: center; margin-top: -8px;
+  }
+  .section-label {
+    font-size: 9px; letter-spacing: 0.15em; text-transform: uppercase;
+    color: #475569; margin: 8px 2px -6px;
+  }
+  .card {
+    display: flex; align-items: center; gap: 14px;
+    background: #0f172a; border: 1px solid #1e3a5f; border-radius: 10px;
+    padding: 14px 16px; text-decoration: none; color: inherit;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .card:active { border-color: #0ea5e9; background: #132038; }
+  .icon { font-size: 28px; line-height: 1; flex-shrink: 0; width: 32px; text-align: center; }
+  .card-title { font-size: 14px; font-weight: 700; color: #e2e8f0; }
+  .card-desc { font-size: 11px; color: #94a3b8; margin-top: 2px; line-height: 1.4; }
+  .footer { font-size: 9px; color: #475569; text-align: center; margin-top: 12px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="eyebrow">Personal Console</div>
+    <div class="title">My Projects</div>
+    <div class="subtitle">Pick something to open. Saved data lives in this browser.</div>
+
+    <div class="section-label">Games</div>
+
+    <a class="card" href="signal-check.html">
+      <div class="icon">📡</div>
+      <div>
+        <div class="card-title">Signal Check</div>
+        <div class="card-desc">Morse code & NATO phonetic alphabet trainer — multiple choice, full recall, and tap-out modes</div>
+      </div>
+    </a>
+
+    <a class="card" href="hangman.html">
+      <div class="icon">🪢</div>
+      <div>
+        <div class="card-title">Hangman — Two Player</div>
+        <div class="card-desc">Set a word, pass the device, guess letters or the whole word — 12 guesses</div>
+      </div>
+    </a>
+
+    <a class="card" href="pool-trickshot.html">
+      <div class="icon">🎱</div>
+      <div>
+        <div class="card-title">Pool Trick Shot</div>
+        <div class="card-desc">Pot the ball in the target pocket with exactly the right number of cushion bounces</div>
+      </div>
+    </a>
+
+    <div class="section-label">Simulations</div>
+
+    <a class="card" href="boarding-comparison.html">
+      <div class="icon">✈️</div>
+      <div>
+        <div class="card-title">Boarding Simulation</div>
+        <div class="card-desc">Spiral v4 vs Pure Steffen — side-by-side aircraft boarding race</div>
+      </div>
+    </a>
+
+    <div class="section-label">Planning</div>
+
+    <a class="card" href="garden-planner.html">
+      <div class="icon">🌳</div>
+      <div>
+        <div class="card-title">Garden Planner</div>
+        <div class="card-desc">30×30 grid · ground levels, materials & layered features for your garden layout</div>
+      </div>
+    </a>
+
+    <a class="card" href="london-trip.html">
+      <div class="icon">🚂</div>
+      <div>
+        <div class="card-title">London Day Trip</div>
+        <div class="card-desc">Timed itinerary with map links and tap-to-check-off stops — Natural History Museum & Soapbox Race</div>
+      </div>
+    </a>
+
+    <div class="footer">Add more tiles here as new projects come along.</div>
+  </div>
+</body>
+</html>
