@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dummy Duel</title>
+<style>
+  html,body{margin:0;padding:0;background:#0d1117;height:100%;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif;}
+  #wrap{display:flex;align-items:center;justify-content:center;height:100%;}
+  #stage{position:relative;width:900px;max-width:97vw;}
+  canvas{background:#87b6d9;display:block;width:100%;height:auto;touch-action:none;box-shadow:0 0 40px rgba(0,0,0,.6);border-radius:6px;}
+  #overlay{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;color:#fff;text-align:center;background:rgba(0,0,0,.6);border-radius:6px;}
+  #overlay h1{font-size:28px;margin:0 0 8px;}
+  #overlay p{font-size:14px;color:#c8d1db;margin:4px 0;max-width:460px;}
+  .key{display:inline-block;background:#2d3744;border:1px solid #4a5568;border-radius:5px;padding:2px 8px;margin:0 2px;font-weight:600;}
+  #startBtn{margin-top:16px;background:#3fb950;border:none;color:#08130a;font-weight:700;padding:10px 26px;border-radius:24px;font-size:15px;cursor:pointer;}
+  #touchControls{position:absolute;bottom:10px;left:0;width:100%;display:flex;justify-content:space-between;padding:0 14px;box-sizing:border-box;pointer-events:none;}
+  .tbtn{pointer-events:auto;width:54px;height:54px;border-radius:50%;background:rgba(255,255,255,.18);border:2px solid rgba(255,255,255,.35);color:#fff;font-size:18px;display:flex;align-items:center;justify-content:center;user-select:none;font-weight:700;}
+  #fireBtn{width:74px;height:74px;font-size:13px;background:rgba(248,81,73,.4);border-color:#f85149;}
+  .tgroup{display:flex;gap:10px;}
+  #backlink{position:absolute;top:6px;left:8px;font-size:11px;color:#58a6ff;text-decoration:none;z-index:50;font-family:'SF Mono','Fira Mono',monospace;background:rgba(0,0,0,.35);padding:3px 8px;border-radius:5px;}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="stage">
+    <a id="backlink" href="index.html">&larr; Back to console</a>
+    <canvas id="c" width="900" height="500"></canvas>
+    <div id="overlay"></div>
+    <div id="touchControls">
+      <div class="tgroup">
+        <div class="tbtn" id="btnUp">▲</div>
+        <div class="tbtn" id="btnDown">▼</div>
+      </div>
+      <div class="tgroup">
+        <div class="tbtn" id="fireBtn">HOLD<br>FIRE</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const W = cv.width, H = cv.height;
+const overlay = document.getElementById('overlay');
+
+// ---------- constants ----------
+const GROUND_Y = 420;
+const GRAVITY = 1500;
+const MIN_SPEED = 260, MAX_SPEED = 800;
+const ANGLE_MIN = 12, ANGLE_MAX = 78;
+const ANGLE_RATE = 55; // deg/sec
+const CHARGE_PERIOD = 1.05; // seconds per oscillation
+const TURN_LIMIT = 16;
+const MAX_HP = 100;
+const DUMMY_W = 44, DUMMY_H = 92;
+
+const ITEMS = [
+  {key:'anvil',   label:'Anvil',         emoji:'⚙️', baseDamage:34, gravMult:1.55, size:17, spin:2.2, color:'#5b636e'},
+  {key:'bowling', label:'Bowling Ball',  emoji:'🎳', baseDamage:27, gravMult:1.05, size:16, spin:9,   color:'#2b2f36'},
+  {key:'brick',   label:'Brick',         emoji:'🧱', baseDamage:23, gravMult:1.2,  size:15, spin:5,   color:'#a14e2a'},
+  {key:'banana',  label:'Banana',        emoji:'🍌', baseDamage:14, gravMult:0.7,  size:16, spin:6.5, color:'#e6c64a'},
+  {key:'chicken', label:'Rubber Chicken',emoji:'🐔', baseDamage:16, gravMult:0.75, size:17, spin:4,   color:'#f0e6d2'},
+  {key:'pie',     label:'Cream Pie',     emoji:'🥧', baseDamage:11, gravMult:0.85, size:16, spin:3,   color:'#f5e7c8'},
+];
+
+const HIT_PHRASES = ['BONK!','OOF!','YEOWCH!','SPLAT!','WHAM!','KAPOW!','POW!','OUCH!'];
+
+// ---------- input ----------
+const input = {up:false, down:false, fire:false};
+window.addEventListener('keydown', e=>{
+  if(['ArrowUp','w','W'].includes(e.key)) input.up=true;
+  if(['ArrowDown','s','S'].includes(e.key)) input.down=true;
+  if(e.key===' '){ input.fire=true; e.preventDefault(); }
+  if(e.key==='Enter') tryStartOrAdvance();
+});
+window.addEventListener('keyup', e=>{
+  if(['ArrowUp','w','W'].includes(e.key)) input.up=false;
+  if(['ArrowDown','s','S'].includes(e.key)) input.down=false;
+  if(e.key===' ') input.fire=false;
+});
+function bindTouch(id, downFn, upFn){
+  const el = document.getElementById(id);
+  el.addEventListener('touchstart', e=>{e.preventDefault();downFn();});
+  el.addEventListener('touchend', e=>{e.preventDefault();upFn&&upFn();});
+  el.addEventListener('mousedown', downFn);
+  el.addEventListener('mouseup', ()=>upFn&&upFn());
+}
+bindTouch('btnUp', ()=>input.up=true, ()=>input.up=false);
+bindTouch('btnDown', ()=>input.down=true, ()=>input.down=false);
+bindTouch('fireBtn', ()=>input.fire=true, ()=>input.fire=false);
+
+function rand(a,b){return a+Math.random()*(b-a);}
+function pick(arr){return arr[Math.floor(Math.random()*arr.length)];}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+
+// ---------- game state ----------
+let players, active, other, turnCount, wind, projectile, popups, shake, phase, gameState='start', resolveT=0, chargeT=0, lastWinner=null;
+
+function newPlayer(x, dir){
+  return {
+    x, dir, hp:MAX_HP, angle:45,
+    item: pick(ITEMS),
+    reactT:0, reactAngle:0, hopT:0, ko:false, koAngle:0
+  };
+}
+
+function startMatch(){
+  players = [newPlayer(130,1), newPlayer(W-130,-1)];
+  active = 0; other = 1;
+  turnCount = 1;
+  wind = rand(-200,200);
+  projectile = null;
+  popups = [];
+  shake = 0;
+  phase = 'aim';
+  chargeT = 0;
+  gameState='play';
+}
+
+function curP(){ return players[active]; }
+function oppP(){ return players[other]; }
+
+function addPopup(x,y,text,color,size){
+  popups.push({x,y,text,color,size:size||20,t:0});
+}
+function updatePopups(dt){
+  for(const p of popups) p.t+=dt;
+  popups = popups.filter(p=>p.t<1.1);
+}
+
+function fire(power){
+  const p = curP();
+  const speed = MIN_SPEED + (power/100)*(MAX_SPEED-MIN_SPEED);
+  const rad = p.angle*Math.PI/180;
+  const vx = Math.cos(rad)*speed*p.dir;
+  const vy = -Math.sin(rad)*speed;
+  projectile = {
+    x: p.x + p.dir*30, y: GROUND_Y-70,
+    vx, vy, item: p.item, rot:0,
+    trail:[]
+  };
+  phase='fly';
+}
+
+function dummyRect(p){
+  return {x:p.x-DUMMY_W/2, y:GROUND_Y-DUMMY_H, w:DUMMY_W, h:DUMMY_H};
+}
+
+function applyHit(targetIdx, impactSpeed, hitY){
+  const target = players[targetIdx];
+  const r = dummyRect(target);
+  const relY = clamp((hitY - r.y)/r.h, 0, 1);
+  let locMult, zoneLabel;
+  if(relY < 0.28){ locMult=1.7; zoneLabel='HEAD SHOT'; }
+  else if(relY < 0.75){ locMult=1.0; zoneLabel='BODY HIT'; }
+  else { locMult=0.55; zoneLabel='LEG HIT'; }
+  const directness = clamp(impactSpeed/MAX_SPEED, 0.35, 1.25);
+  const dmg = Math.round(clamp(projectile.item.baseDamage * directness * locMult, 3, 55));
+  target.hp = Math.max(0, target.hp - dmg);
+
+  target.reactT = 0.7 + dmg*0.01;
+  target.reactAngle = clamp(dmg*1.6, 10, 65) * (target.dir);
+  target.hopT = 0.35;
+  shake = Math.min(18, dmg*0.5);
+
+  addPopup(target.x, r.y-10, `-${dmg}`, '#ff5c5c', 26);
+  addPopup(target.x, r.y-38, zoneLabel, '#ffd33d', 14);
+  addPopup(target.x, r.y-58, pick(HIT_PHRASES), '#ffffff', 22);
+
+  if(target.hp<=0){
+    target.ko = true;
+    target.koAngle = 0;
+  }
+}
+
+function endTurn(hit){
+  resolveT = 0;
+  phase = 'resolve';
+  window.__lastHit = hit;
+}
+
+function nextTurnOrGameOver(){
+  const loser = players.find(p=>p.hp<=0);
+  if(loser){
+    gameState='gameover';
+    lastWinner = players.indexOf(loser)===0 ? 1 : 0;
+    return;
+  }
+  if(turnCount >= TURN_LIMIT){
+    gameState='gameover';
+    if(players[0].hp===players[1].hp) lastWinner='draw';
+    else lastWinner = players[0].hp>players[1].hp ? 0 : 1;
+    return;
+  }
+  turnCount++;
+  const tmp = active; active = other; other = tmp;
+  curP().item = pick(ITEMS);
+  wind = rand(-200,200);
+  projectile = null;
+  phase = 'aim';
+  chargeT = 0;
+}
+
+// ---------- update ----------
+function update(dt){
+  if(gameState!=='play') return;
+  updatePopups(dt);
+  shake = Math.max(0, shake-dt*40);
+
+  for(const p of players){
+    if(p.reactT>0) p.reactT = Math.max(0,p.reactT-dt);
+    if(p.hopT>0) p.hopT = Math.max(0,p.hopT-dt);
+    if(p.ko && p.koAngle<90) p.koAngle = Math.min(90, p.koAngle + dt*220);
+  }
+
+  if(phase==='aim'){
+    const p = curP();
+    if(input.up) p.angle = clamp(p.angle + ANGLE_RATE*dt, ANGLE_MIN, ANGLE_MAX);
+    if(input.down) p.angle = clamp(p.angle - ANGLE_RATE*dt, ANGLE_MIN, ANGLE_MAX);
+    if(input.fire){ phase='charging'; chargeT=0; }
+  } else if(phase==='charging'){
+    chargeT += dt;
+    if(!input.fire){
+      const power = (Math.sin(chargeT*(2*Math.PI/CHARGE_PERIOD) - Math.PI/2)*0.5+0.5)*100;
+      fire(power);
+    }
+  } else if(phase==='fly'){
+    const pr = projectile;
+    pr.vx += wind*dt;
+    pr.vy += GRAVITY*pr.item.gravMult*dt;
+    pr.x += pr.vx*dt;
+    pr.y += pr.vy*dt;
+    pr.rot += pr.item.spin*dt;
+    pr.trail.push({x:pr.x,y:pr.y});
+    if(pr.trail.length>14) pr.trail.shift();
+
+    const targetIdx = other;
+    const r = dummyRect(players[targetIdx]);
+    const rad = pr.item.size*0.5;
+    const hitBox = {x:r.x-rad,y:r.y-rad,w:r.w+rad*2,h:r.h+rad*2};
+    if(pr.x>hitBox.x && pr.x<hitBox.x+hitBox.w && pr.y>hitBox.y && pr.y<hitBox.y+hitBox.h){
+      const speed = Math.sqrt(pr.vx*pr.vx+pr.vy*pr.vy);
+      applyHit(targetIdx, speed, pr.y);
+      endTurn(true);
+      return;
+    }
+    if(pr.y >= GROUND_Y-6 || pr.x<-60 || pr.x>W+60){
+      addPopup(clamp(pr.x,30,W-30), GROUND_Y-20, 'MISS', '#9aa7b5', 20);
+      endTurn(false);
+      return;
+    }
+  } else if(phase==='resolve'){
+    resolveT += dt;
+    const dur = window.__lastHit ? 1.05 : 0.55;
+    if(resolveT > dur){
+      nextTurnOrGameOver();
+    }
+  }
+}
+
+// ---------- drawing ----------
+function drawDummy(p){
+  const r = dummyRect(p);
+  ctx.save();
+  const hop = p.hopT>0 ? Math.sin((0.35-p.hopT)/0.35*Math.PI)*10 : 0;
+  const cx = p.x, cy = GROUND_Y - hop;
+  ctx.translate(cx, cy);
+  if(p.ko){
+    ctx.rotate(p.koAngle*Math.PI/180*p.dir*-1);
+    ctx.translate(0,-DUMMY_H/2);
+  } else {
+    const tilt = p.reactT>0 ? p.reactAngle*(p.reactT/0.9) : 0;
+    ctx.rotate(tilt*Math.PI/180*0.4);
+  }
+  ctx.lineWidth=5; ctx.lineCap='round';
+  ctx.strokeStyle = '#2b2f36';
+  ctx.fillStyle = '#e8e2d0';
+  // legs
+  ctx.beginPath();
+  ctx.moveTo(0,-46); ctx.lineTo(-13,-2);
+  ctx.moveTo(0,-46); ctx.lineTo(13,-2);
+  ctx.stroke();
+  // torso
+  ctx.beginPath();
+  ctx.moveTo(0,-46); ctx.lineTo(0,-78);
+  ctx.lineWidth=9; ctx.strokeStyle='#dcd5bd'; ctx.stroke();
+  ctx.lineWidth=5; ctx.strokeStyle='#2b2f36';
+  // arms
+  ctx.beginPath();
+  ctx.moveTo(0,-72); ctx.lineTo(-17*p.dir,-50);
+  ctx.moveTo(0,-72); ctx.lineTo(17*p.dir,-50);
+  ctx.stroke();
+  // head
+  ctx.beginPath(); ctx.arc(0,-88,13,0,Math.PI*2); ctx.fill(); ctx.stroke();
+  // face
+  ctx.fillStyle='#2b2f36';
+  if(p.ko){
+    ctx.font='bold 12px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('X', -5,-86); ctx.fillText('X', 5,-86);
+  } else {
+    ctx.beginPath(); ctx.arc(-4,-89,1.6,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(4,-89,1.6,0,Math.PI*2); ctx.fill();
+  }
+  // crash-dummy joints (red dots)
+  ctx.fillStyle='#d23b3b';
+  const joints = [[0,-46],[-13,-2],[13,-2],[0,-72],[-17*p.dir,-50],[17*p.dir,-50]];
+  for(const [jx,jy] of joints){ ctx.beginPath(); ctx.arc(jx,jy,3,0,Math.PI*2); ctx.fill(); }
+
+  if(p.reactT>0.35 && (p.reactAngle*p.reactT)>12){
+    ctx.save(); ctx.translate(0,-108); ctx.rotate(p.reactT*8);
+    ctx.fillStyle='#ffd33d'; ctx.font='16px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('✦', 14,0); ctx.fillText('✦', -14,4); ctx.fillText('✦', 0,-12);
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawAimArrow(p){
+  if(p.ko) return;
+  const rad = p.angle*Math.PI/180;
+  const len = 46 + (phase==='charging' ? chargePowerNow()*0.35 : 0);
+  const sx = p.x, sy = GROUND_Y-78;
+  const ex = sx + Math.cos(rad)*len*p.dir;
+  const ey = sy - Math.sin(rad)*len;
+  ctx.strokeStyle='#ffd33d'; ctx.lineWidth=4; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(sx,sy); ctx.lineTo(ex,ey); ctx.stroke();
+  ctx.beginPath(); ctx.arc(ex,ey,5,0,Math.PI*2); ctx.fillStyle='#ffd33d'; ctx.fill();
+}
+
+function chargePowerNow(){
+  return (Math.sin(chargeT*(2*Math.PI/CHARGE_PERIOD) - Math.PI/2)*0.5+0.5)*100;
+}
+
+function drawTrajectoryPreview(p){
+  if(p.ko) return;
+  const power = phase==='charging' ? chargePowerNow() : 55;
+  const speed = MIN_SPEED + (power/100)*(MAX_SPEED-MIN_SPEED);
+  const rad = p.angle*Math.PI/180;
+  let x = p.x+p.dir*30, y = GROUND_Y-70;
+  let vx = Math.cos(rad)*speed*p.dir, vy=-Math.sin(rad)*speed;
+  const gm = p.item.gravMult;
+  ctx.fillStyle='rgba(255,255,255,0.55)';
+  for(let i=0;i<26;i++){
+    const dt=0.045;
+    vx+=wind*dt; vy+=GRAVITY*gm*dt;
+    x+=vx*dt; y+=vy*dt;
+    if(y>GROUND_Y || x<0 || x>W) break;
+    if(i%2===0){ ctx.beginPath(); ctx.arc(x,y,2.5,0,Math.PI*2); ctx.fill(); }
+  }
+}
+
+function drawProjectile(){
+  if(!projectile) return;
+  const pr = projectile;
+  ctx.save();
+  for(let i=0;i<pr.trail.length;i++){
+    const t = pr.trail[i];
+    ctx.globalAlpha = (i/pr.trail.length)*0.4;
+    ctx.fillStyle = pr.item.color;
+    ctx.beginPath(); ctx.arc(t.x,t.y,pr.item.size*0.35,0,Math.PI*2); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+  ctx.translate(pr.x,pr.y);
+  ctx.rotate(pr.rot);
+  ctx.font=`${pr.item.size*1.7}px sans-serif`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(pr.item.emoji, 0, 0);
+  ctx.restore();
+}
+
+function drawHud(){
+  // HP bars
+  for(let i=0;i<2;i++){
+    const p = players[i];
+    const x = i===0 ? 24 : W-224;
+    ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.fillRect(x,16,200,26);
+    const pct = Math.max(0,p.hp)/MAX_HP;
+    ctx.fillStyle = pct>0.5?'#3fb950':pct>0.25?'#d29922':'#f85149';
+    ctx.fillRect(x+3,19,194*pct,20);
+    ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.strokeRect(x,16,200,26);
+    ctx.fillStyle='#fff'; ctx.font='bold 13px sans-serif'; ctx.textAlign=i===0?'left':'right';
+    ctx.fillText(`P${i+1}  ${Math.max(0,p.hp)} HP`, i===0?x+6:x+194, 33);
+  }
+  // turn counter
+  ctx.fillStyle='#fff'; ctx.font='bold 15px sans-serif'; ctx.textAlign='center';
+  ctx.fillText(`TURN ${turnCount} / ${TURN_LIMIT}`, W/2, 30);
+
+  // wind
+  ctx.font='12px sans-serif'; ctx.fillStyle='#1b2230';
+  ctx.fillText('WIND', W/2, 52);
+  const wlen = clamp(Math.abs(wind)/2, 4, 50);
+  ctx.strokeStyle='#1b2230'; ctx.lineWidth=3; ctx.lineCap='round';
+  ctx.beginPath();
+  ctx.moveTo(W/2 - (wind>0?0:wlen), 64);
+  ctx.lineTo(W/2 + (wind>0?wlen:0), 64);
+  ctx.stroke();
+  ctx.beginPath();
+  const ax = wind>0 ? W/2+wlen : W/2-wlen;
+  ctx.moveTo(ax,64); ctx.lineTo(ax-(wind>0?6:-6),60); ctx.lineTo(ax-(wind>0?6:-6),68);
+  ctx.closePath(); ctx.fillStyle='#1b2230'; ctx.fill();
+
+  if(gameState==='play' && phase!=='fly'){
+    const p = curP();
+    ctx.fillStyle='rgba(0,0,0,0.35)';
+    const bx = active===0 ? 24 : W-224;
+    ctx.fillRect(bx, H-86, 200, 50);
+    ctx.fillStyle='#fff'; ctx.font='13px sans-serif'; ctx.textAlign='left';
+    ctx.fillText(`P${active+1}'s turn — ${p.item.emoji} ${p.item.label}`, bx+8, H-68);
+    ctx.font='11px sans-serif'; ctx.fillStyle='#c8d1db';
+    ctx.fillText('▲▼ angle   hold SPACE to fire', bx+8, H-50);
+
+    if(phase==='charging'){
+      const pw = chargePowerNow();
+      ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.fillRect(bx, H-32, 200, 16);
+      ctx.fillStyle = pw>80?'#f85149':pw>45?'#ffd33d':'#3fb950';
+      ctx.fillRect(bx+2, H-30, 196*(pw/100), 12);
+      ctx.strokeStyle='#fff'; ctx.lineWidth=1.5; ctx.strokeRect(bx,H-32,200,16);
+    }
+  }
+}
+
+function drawPopups(){
+  for(const p of popups){
+    ctx.globalAlpha = Math.max(0,1-p.t/1.1);
+    ctx.fillStyle = p.color;
+    ctx.font = `bold ${p.size}px sans-serif`;
+    ctx.textAlign='center';
+    ctx.strokeStyle='rgba(0,0,0,0.5)'; ctx.lineWidth=3;
+    const yy = p.y - p.t*50;
+    ctx.strokeText(p.text, p.x, yy);
+    ctx.fillText(p.text, p.x, yy);
+  }
+  ctx.globalAlpha=1;
+}
+
+function draw(){
+  ctx.save();
+  if(shake>0){
+    ctx.translate(rand(-shake,shake), rand(-shake,shake));
+  }
+  // sky
+  const sky = ctx.createLinearGradient(0,0,0,GROUND_Y);
+  sky.addColorStop(0,'#6fa8d6'); sky.addColorStop(1,'#bcdcf0');
+  ctx.fillStyle = sky; ctx.fillRect(0,0,W,GROUND_Y+20);
+  // clouds
+  ctx.fillStyle='rgba(255,255,255,0.7)';
+  [[140,90,30],[320,60,22],[600,100,26],[760,55,20]].forEach(([cx,cy,r])=>{
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.arc(cx+r*0.9,cy+5,r*0.7,0,Math.PI*2); ctx.arc(cx-r*0.9,cy+6,r*0.6,0,Math.PI*2); ctx.fill();
+  });
+  // ground
+  ctx.fillStyle='#7a9e57'; ctx.fillRect(0,GROUND_Y,W,H-GROUND_Y);
+  ctx.fillStyle='#6a8a4a'; ctx.fillRect(0,GROUND_Y,W,8);
+
+  if(gameState!=='start'){
+    for(const p of players) drawDummy(p);
+    if(gameState==='play' && (phase==='aim'||phase==='charging')){
+      drawTrajectoryPreview(curP());
+      drawAimArrow(curP());
+    }
+    drawProjectile();
+    drawPopups();
+    drawHud();
+  }
+  ctx.restore();
+}
+
+// ---------- overlay ----------
+function tryStartOrAdvance(){
+  if(gameState==='start' || gameState==='gameover'){ startMatch(); }
+}
+let lastRenderedState=null, lastRenderedPhase=null;
+function renderOverlay(){
+  const key = gameState+phase;
+  if(gameState==='play'){ overlay.style.display='none'; lastRenderedState=key; return; }
+  if(key===lastRenderedState) return;
+  lastRenderedState = key;
+  overlay.style.display='flex';
+  if(gameState==='start'){
+    overlay.innerHTML = `
+      <h1>🤜 DUMMY DUEL 🤛</h1>
+      <p>Two crash-test dummies. One arena. Whatever's lying around to throw.</p>
+      <p><span class="key">▲</span><span class="key">▼</span> set angle &nbsp; hold <span class="key">SPACE</span> to charge power, release to fire</p>
+      <p>Damage depends on how hard and how square you hit — a clean head shot at full charge hurts a lot more than a glancing leg tap. ${TURN_LIMIT} turns total, or until someone's KO'd.</p>
+      <button id="startBtn">START DUEL</button>`;
+    document.getElementById('startBtn').onclick = tryStartOrAdvance;
+  } else if(gameState==='gameover'){
+    let title, sub;
+    if(lastWinner==='draw'){ title='🤝 DRAW!'; sub=`Both dummies limp away with ${players[0].hp} HP.`; }
+    else { title=`🏆 PLAYER ${lastWinner+1} WINS!`; sub=`Final HP — P1: ${players[0].hp} · P2: ${players[1].hp}`; }
+    overlay.innerHTML = `<h1>${title}</h1><p>${sub}</p><button id="startBtn">REMATCH</button>`;
+    document.getElementById('startBtn').onclick = tryStartOrAdvance;
+  }
+}
+
+// ---------- loop ----------
+let last = performance.now();
+function loop(now){
+  const dt = Math.min((now-last)/1000, 0.033); last=now;
+  update(dt);
+  draw();
+  renderOverlay();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
