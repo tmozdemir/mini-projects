@@ -94,9 +94,10 @@
     justify-content:center;
     gap:7px;
     margin-bottom:10px;
-    flex-wrap:wrap;
+    flex-wrap:nowrap;
   }
   .letter-box{
+    flex:0 0 auto;
     width:38px; height:46px;
     border:1px solid var(--line);
     border-radius:8px;
@@ -119,6 +120,46 @@
     min-height:1.2em;
   }
   .setup-meta.warn{ color:var(--red); }
+
+  .spell-suggest{
+    text-align:center;
+    margin:-12px 0 18px;
+    padding:12px 14px;
+    border:1px solid var(--amber);
+    background:#241c0c;
+    border-radius:10px;
+  }
+  .spell-suggest-text{
+    font-size:0.8rem;
+    color:var(--bone);
+    margin-bottom:10px;
+  }
+  .spell-suggest-text strong{ color:var(--amber); letter-spacing:0.04em; }
+  .spell-suggest-buttons{
+    display:flex;
+    gap:8px;
+  }
+  .suggest-btn{
+    flex:1;
+    font-family:inherit;
+    font-weight:700;
+    font-size:0.72rem;
+    letter-spacing:0.04em;
+    text-transform:uppercase;
+    padding:10px 0;
+    border-radius:8px;
+    cursor:pointer;
+  }
+  .suggest-btn.yes{
+    border:1px solid var(--green);
+    background:var(--green-dim);
+    color:var(--green);
+  }
+  .suggest-btn.no{
+    border:1px solid var(--line);
+    background:var(--panel-2);
+    color:var(--dim);
+  }
 
   .primary-btn{
     width:100%;
@@ -325,6 +366,13 @@
       <div class="word-input-row" id="wordInputRow"></div>
       <div class="setup-meta" id="setupMeta">&nbsp;</div>
       <div class="setup-meta warn hidden" id="spellWarning">Not a recognised English word</div>
+      <div class="spell-suggest hidden" id="spellSuggest">
+        <div class="spell-suggest-text" id="spellSuggestText">Did you mean <strong id="spellSuggestWord">WORD</strong>?</div>
+        <div class="spell-suggest-buttons">
+          <button class="suggest-btn yes" id="useSuggestionBtn">Yes, use it</button>
+          <button class="suggest-btn no" id="keepOwnBtn">No, keep mine</button>
+        </div>
+      </div>
       <button class="primary-btn" id="confirmWordBtn" disabled>Lock in word</button>
     </div>
 
@@ -392,6 +440,10 @@ const els = {
   wordInputRow: document.getElementById('wordInputRow'),
   setupMeta: document.getElementById('setupMeta'),
   spellWarning: document.getElementById('spellWarning'),
+  spellSuggest: document.getElementById('spellSuggest'),
+  spellSuggestWord: document.getElementById('spellSuggestWord'),
+  useSuggestionBtn: document.getElementById('useSuggestionBtn'),
+  keepOwnBtn: document.getElementById('keepOwnBtn'),
   confirmWordBtn: document.getElementById('confirmWordBtn'),
   startGuessingBtn: document.getElementById('startGuessingBtn'),
   wordDisplay: document.getElementById('wordDisplay'),
@@ -414,6 +466,21 @@ let guessesUsed = 0;
 let gameOver = false;
 
 /* ---------- Setup: build letter boxes ---------- */
+function sizeWordInputRow(){
+  const gap = 4;
+  const containerWidth = els.wordInputRow.clientWidth || (window.innerWidth - 80);
+  let boxWidth = Math.floor((containerWidth - (MAX_LETTER_BOXES - 1) * gap) / MAX_LETTER_BOXES);
+  boxWidth = Math.max(20, Math.min(38, boxWidth));
+  const boxHeight = Math.round(boxWidth * 1.2);
+  const fontSize = Math.max(0.85, Math.min(1.3, boxWidth / 29.2));
+  els.wordInputRow.style.gap = gap + 'px';
+  [...els.wordInputRow.children].forEach(box => {
+    box.style.width = boxWidth + 'px';
+    box.style.height = boxHeight + 'px';
+    box.style.fontSize = fontSize.toFixed(2) + 'rem';
+  });
+}
+
 function buildWordInputs(){
   els.wordInputRow.innerHTML = '';
   for (let i = 0; i < MAX_LETTER_BOXES; i++){
@@ -426,8 +493,10 @@ function buildWordInputs(){
     box.addEventListener('keydown', onBoxKeydown);
     els.wordInputRow.appendChild(box);
   }
+  sizeWordInputRow();
 }
 buildWordInputs();
+window.addEventListener('resize', sizeWordInputRow);
 
 function onBoxInput(e){
   const val = e.target.value.replace(/[^a-zA-Z]/g, '').toUpperCase().slice(-1);
@@ -438,6 +507,7 @@ function onBoxInput(e){
     if (next) next.focus();
   }
   els.spellWarning.classList.add('hidden');
+  els.spellSuggest.classList.add('hidden');
   validateSetup();
 }
 function onBoxKeydown(e){
@@ -485,6 +555,32 @@ async function checkSpelling(word){
   }
 }
 
+async function getSuggestion(word){
+  // Fuzzy "spelled like" lookup via Datamuse — returns a suggested real word, or null
+  try {
+    const res = await fetch('https://api.datamuse.com/words?sp=' + encodeURIComponent(word.toLowerCase()) + '&max=1');
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data && data[0] && data[0].word && /^[a-zA-Z]+$/.test(data[0].word)){
+      const suggestion = data[0].word.toUpperCase();
+      return suggestion !== word ? suggestion : null;
+    }
+    return null;
+  } catch (err){
+    return null;
+  }
+}
+
+function lockInWord(word){
+  secretWord = word;
+  els.confirmWordBtn.textContent = 'Lock in word';
+  els.confirmWordBtn.disabled = false;
+  els.spellWarning.classList.add('hidden');
+  els.spellSuggest.classList.add('hidden');
+  els.setupScreen.classList.add('hidden');
+  els.handoffScreen.classList.remove('hidden');
+}
+
 els.confirmWordBtn.addEventListener('click', async ()=>{
   const boxes = [...els.wordInputRow.children];
   const word = boxes.map(b=>b.value).join('').toUpperCase();
@@ -492,14 +588,23 @@ els.confirmWordBtn.addEventListener('click', async ()=>{
   els.confirmWordBtn.disabled = true;
   els.confirmWordBtn.textContent = 'Checking spelling…';
   els.spellWarning.classList.add('hidden');
+  els.spellSuggest.classList.add('hidden');
 
   const result = await checkSpelling(word);
 
   if (result === false){
-    els.spellWarning.textContent = `"${word}" isn't a recognised English word — try another`;
-    els.spellWarning.classList.remove('hidden');
+    const suggestion = await getSuggestion(word);
     els.confirmWordBtn.disabled = false;
     els.confirmWordBtn.textContent = 'Lock in word';
+
+    if (suggestion){
+      els.spellSuggestWord.textContent = suggestion;
+      els.spellSuggest.classList.remove('hidden');
+      els.useSuggestionBtn.onclick = ()=> lockInWord(suggestion);
+      els.keepOwnBtn.onclick = ()=> lockInWord(word);
+    } else {
+      lockInWord(word);
+    }
     return;
   }
 
@@ -508,11 +613,7 @@ els.confirmWordBtn.addEventListener('click', async ()=>{
     els.spellWarning.classList.remove('hidden');
   }
 
-  secretWord = word;
-  els.confirmWordBtn.textContent = 'Lock in word';
-  els.confirmWordBtn.disabled = false;
-  els.setupScreen.classList.add('hidden');
-  els.handoffScreen.classList.remove('hidden');
+  lockInWord(word);
 });
 
 els.startGuessingBtn.addEventListener('click', ()=>{
@@ -667,6 +768,7 @@ els.playAgainBtn.addEventListener('click', ()=>{
   buildWordInputs();
   validateSetup();
   els.spellWarning.classList.add('hidden');
+  els.spellSuggest.classList.add('hidden');
   els.endScreen.classList.add('hidden');
   els.setupScreen.classList.remove('hidden');
   els.statusRight.innerHTML = '';
