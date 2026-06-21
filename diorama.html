@@ -180,31 +180,31 @@
   const MAX_SPEED = 260;    // world units / sec
   const ACCEL     = 7;      // velocity lerp rate
   const BIKE_R    = 13;
-  const HOP_DURATION = 0.32;
+  const HOP_DURATION = 0.42;
 
   /* ======================= SCENES ======================= */
   const SCENES = [
     {
-      id:1, name:'Meadow Loop',
-      worldW:1100, worldH:1300,
-      start:{x:120,y:1150}, flag:{x:950,y:160},
-      path:[[120,1150],[300,1000],[500,950],[650,700],[800,500],[900,300],[950,160]],
-      mounds:[{x:300,y:850,r:70},{x:700,y:450,r:90}],
-      ponds:[{x:550,y:650,rx:90,ry:55}],
-      trees:[{x:200,y:900},{x:850,y:850},{x:980,y:700},{x:150,y:500},{x:650,y:250},{x:400,y:200}],
-      rocks:[{x:500,y:1050},{x:760,y:600},{x:300,y:300}]
+      id:1, name:'Meadow Climb',
+      worldW:620, worldH:2200,
+      start:{x:310,y:2080}, flag:{x:330,y:140},
+      path:[[310,2080],[260,1820],[360,1560],[280,1300],[340,1040],[260,780],[330,520],[290,300],[330,140]],
+      mounds:[{x:200,y:1700,r:70},{x:420,y:900,r:90},{x:250,y:450,r:64}],
+      ponds:[{x:380,y:1450,rx:95,ry:60},{x:250,y:680,rx:80,ry:50}],
+      trees:[{x:160,y:1900},{x:470,y:1750},{x:200,y:1350},{x:450,y:1180},{x:180,y:980},{x:460,y:620},{x:200,y:240},{x:440,y:360}],
+      rocks:[{x:380,y:1980},{x:250,y:1560},{x:430,y:1380},{x:200,y:1100},{x:420,y:760},{x:260,y:540}]
     },
     {
-      id:2, name:'Rocky Pass',
-      worldW:1200, worldH:1300,
-      start:{x:100,y:1150}, flag:{x:1080,y:150},
-      path:[[100,1150],[250,1000],[300,800],[500,750],[650,600],[600,400],[800,300],[1000,250],[1080,150]],
-      mounds:[{x:400,y:900,r:80}],
-      ponds:[{x:650,y:500,rx:110,ry:60}],
-      trees:[{x:150,y:850},{x:900,y:1000},{x:1050,y:800},{x:200,y:400},{x:850,y:150},{x:450,y:200}],
+      id:2, name:'Rocky Ascent',
+      worldW:660, worldH:2500,
+      start:{x:330,y:2380}, flag:{x:340,y:150},
+      path:[[330,2380],[260,2120],[380,1880],[300,1620],[400,1380],[280,1120],[360,860],[300,580],[360,330],[340,150]],
+      mounds:[{x:230,y:1900,r:78},{x:430,y:1000,r:70}],
+      ponds:[{x:360,y:1500,rx:110,ry:62},{x:280,y:720,rx:90,ry:52}],
+      trees:[{x:170,y:2050},{x:480,y:1820},{x:200,y:1250},{x:470,y:1050},{x:180,y:520},{x:470,y:420}],
       rocks:[
-        {x:300,y:1000},{x:350,y:950},{x:550,y:850},{x:750,y:800},{x:850,y:650},{x:900,y:550},
-        {x:500,y:300},{x:700,y:200},{x:950,y:400}
+        {x:380,y:2180},{x:250,y:1980},{x:430,y:1700},{x:280,y:1450},{x:420,y:1280},
+        {x:240,y:1000},{x:440,y:780},{x:300,y:480},{x:400,y:280}
       ]
     }
   ];
@@ -243,7 +243,9 @@
   let elapsed = 0;
   let rafId = null;
 
-  const bike = { x:0, y:0, vx:0, vy:0, hopTimer:0, hopping:false, angle:0 };
+  const bike = { x:0, y:0, vx:0, vy:0, hopTimer:0, hopping:false, hopVX:0, hopVY:0, angle:0 };
+  let bikeFacing = 1;   // 1 = facing right, -1 = facing left
+  let wheelSpin = 0;
   const cam = { x:0, y:0 };
   const touch = { active:false, anchorX:0, anchorY:0, curX:0, curY:0 };
 
@@ -274,7 +276,8 @@
   function startScene(id){
     scene = SCENES.find(s=>s.id===id);
     bike.x = scene.start.x; bike.y = scene.start.y;
-    bike.vx = 0; bike.vy = 0; bike.hopping = false; bike.hopTimer = 0; bike.angle = 0;
+    bike.vx = 0; bike.vy = 0; bike.hopping = false; bike.hopTimer = 0; bike.hopVX = 0; bike.hopVY = 0; bike.angle = 0;
+    bikeFacing = 1; wheelSpin = 0;
     cam.x = bike.x; cam.y = bike.y;
     elapsed = 0;
     started = false;
@@ -341,6 +344,9 @@
     if (!bike.hopping){
       bike.hopping = true;
       bike.hopTimer = 0;
+      // launch in the direction of current momentum, with a little forward boost
+      bike.hopVX = bike.vx * 1.15;
+      bike.hopVY = bike.vy * 1.15;
     }
   }
   els.touchLayer.addEventListener('pointerdown', pointerDown);
@@ -377,7 +383,11 @@
     elapsed += dt;
 
     let targetVX = 0, targetVY = 0;
-    if (touch.active){
+    if (bike.hopping){
+      // airborne: ignore steering, coast on the velocity latched at takeoff
+      bike.vx = bike.hopVX;
+      bike.vy = bike.hopVY;
+    } else if (touch.active){
       const dx = touch.curX - touch.anchorX;
       const dy = touch.curY - touch.anchorY;
       const dragDist = Math.hypot(dx,dy);
@@ -391,8 +401,10 @@
       }
     }
 
-    bike.vx += (targetVX - bike.vx) * Math.min(1, ACCEL*dt);
-    bike.vy += (targetVY - bike.vy) * Math.min(1, ACCEL*dt);
+    if (!bike.hopping){
+      bike.vx += (targetVX - bike.vx) * Math.min(1, ACCEL*dt);
+      bike.vy += (targetVY - bike.vy) * Math.min(1, ACCEL*dt);
+    }
 
     bike.x += bike.vx * dt;
     bike.y += bike.vy * dt;
@@ -549,30 +561,123 @@
     ctx.stroke();
   }
 
+  function drawBicycleShape(){
+    // drawn centred at origin, facing right; caller handles flip/rotation/lift
+    const W = '#1d2b22';     // outline / wheels
+    const FRAME = '#ff5d3a'; // frame colour
+    const SKIN = '#f0c089';
+    const SHIRT = '#3a78c8';
+
+    // wheels
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = W;
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    [-13, 13].forEach(wx=>{
+      ctx.beginPath();
+      ctx.arc(wx, 6, 9, 0, Math.PI*2);
+      ctx.fill();
+      ctx.stroke();
+    });
+    // spokes (spin with travel)
+    ctx.lineWidth = 1.4;
+    ctx.strokeStyle = 'rgba(29,43,34,0.7)';
+    [-13, 13].forEach(wx=>{
+      for (let k=0;k<4;k++){
+        const a = wheelSpin + k*(Math.PI/4);
+        ctx.beginPath();
+        ctx.moveTo(wx, 6);
+        ctx.lineTo(wx + Math.cos(a)*8, 6 + Math.sin(a)*8);
+        ctx.stroke();
+      }
+    });
+
+    // frame: rear wheel -> crank -> seat -> head, plus down tube
+    ctx.lineWidth = 3.4;
+    ctx.strokeStyle = FRAME;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-13, 6);   // rear hub
+    ctx.lineTo(0, 6);     // crank/bottom bracket
+    ctx.lineTo(-4, -6);   // up to seat
+    ctx.lineTo(-13, 6);   // seat stay back to rear hub
+    ctx.moveTo(0, 6);     // crank
+    ctx.lineTo(9, -7);    // down tube up to head tube
+    ctx.lineTo(-4, -6);   // top tube to seat
+    ctx.moveTo(9, -7);    // head tube
+    ctx.lineTo(13, 6);    // fork to front hub
+    ctx.stroke();
+
+    // handlebars
+    ctx.beginPath();
+    ctx.moveTo(9, -7);
+    ctx.lineTo(14, -11);
+    ctx.stroke();
+
+    // seat
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = W;
+    ctx.beginPath();
+    ctx.moveTo(-7, -7);
+    ctx.lineTo(-1, -7);
+    ctx.stroke();
+
+    // little rider
+    ctx.fillStyle = SHIRT;          // torso
+    ctx.beginPath();
+    ctx.moveTo(-4, -7);
+    ctx.lineTo(9, -9);
+    ctx.lineTo(7, -16);
+    ctx.lineTo(-2, -13);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = SKIN;           // head
+    ctx.beginPath();
+    ctx.arc(8, -19, 4.2, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = W;              // helmet cap
+    ctx.beginPath();
+    ctx.arc(8, -19, 4.2, Math.PI, Math.PI*2);
+    ctx.fill();
+    // arm to bars
+    ctx.strokeStyle = SHIRT;
+    ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(4, -12);
+    ctx.lineTo(13, -10);
+    ctx.stroke();
+  }
+
   function drawBike(){
     const s = toScreen(bike.x, bike.y);
     const hopFrac = bike.hopping ? Math.sin(Math.min(1,bike.hopTimer/HOP_DURATION)*Math.PI) : 0;
-    const lift = hopFrac * 26;
+    const lift = hopFrac * 30;
     const shadowScale = 1 - hopFrac*0.55;
 
-    drawShadow(s, 13*shadowScale, 6*shadowScale);
+    // update facing from horizontal travel (ignore tiny drift)
+    if (bike.vx > 8) bikeFacing = 1;
+    else if (bike.vx < -8) bikeFacing = -1;
+
+    // spin wheels in proportion to speed
+    const speed = Math.hypot(bike.vx, bike.vy);
+    wheelSpin += (speed/MAX_SPEED) * 0.5 * bikeFacing;
+
+    drawShadow(s, 15*shadowScale, 7*shadowScale);
 
     ctx.save();
-    ctx.translate(s.x, s.y - 6 - lift);
-    const lean = Math.max(-0.4, Math.min(0.4, (bike.vx)/MAX_SPEED*0.4));
-    ctx.rotate(lean);
+    ctx.translate(s.x, s.y - 8 - lift);
+    ctx.scale(bikeFacing, 1);
 
-    ctx.fillStyle = '#1a1a1a';
-    ctx.beginPath(); ctx.ellipse(-9,8,6,6,0,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(9,8,6,6,0,0,Math.PI*2); ctx.fill();
+    if (bike.hopping){
+      // comedic tumble in the air, in travel direction
+      const t = Math.min(1, bike.hopTimer/HOP_DURATION);
+      ctx.rotate(t * Math.PI * 1.4 * 1);
+    } else {
+      const lean = Math.max(-0.25, Math.min(0.25, (speed/MAX_SPEED)*0.2));
+      ctx.rotate(-lean);
+    }
 
-    ctx.fillStyle = '#e8a23c';
-    ctx.strokeStyle = '#2a2a2a';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.ellipse(0,0,13,13,0,0,Math.PI*2);
-    ctx.fill(); ctx.stroke();
-
+    drawBicycleShape();
     ctx.restore();
   }
 
