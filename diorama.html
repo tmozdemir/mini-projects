@@ -689,44 +689,51 @@
     const facing = along >= 0 ? 1 : -1;
     const toward = depth;               // -1 away (see rider's back), +1 toward (see face)
 
-    // Travel axis on screen: mostly horizontal, with a small vertical skew for the
-    // tilted camera (things moving away rise slightly up the screen).
-    const tax = facing * sideness;      // horizontal extent of the wheelbase
-    const tay = depth * 0.30;           // slight vertical skew of the wheelbase
-    const wheelSep = 13;                // half-wheelbase in bike units
+    // Wheelbase projection. Side-on: wheels spread horizontally.
+    // Front/back-on: wheels line up vertically (near wheel low, far wheel high),
+    // each wheel seen close to head-on so it stays a near-circle, not a sliver.
+    const wheelSep = 13;
+    const hubDX = facing * sideness * wheelSep;        // horizontal spread (0 at front/back)
+    const hubDY = (1 - sideness) * 7;                  // vertical separation when front/back-on
+    // far wheel = the one further from camera (toward<0 means riding away -> far wheel is "front")
+    const farSign = toward >= 0 ? -1 : 1;
+    const rearO  = { x:-hubDX, y: 6 + hubDY };          // nearer wheel sits lower
+    const frontO = { x: hubDX, y: 6 - hubDY };          // further wheel sits higher & smaller
 
-    // wheel hub screen offsets from centre
-    const rearO  = { x:-tax*wheelSep, y: 6 - tay*wheelSep };
-    const frontO = { x: tax*wheelSep, y: 6 + tay*wheelSep };
+    // Wheel shape: a wheel seen edge-on (side view) is a thin vertical ellipse... no:
+    // seen from the SIDE it's a full circle; seen head-on it's a thin vertical sliver.
+    // So width tracks sideness, height stays ~constant.
+    const sideWheelW = 9, headWheelW = 2.6;
+    const wheelW = headWheelW + (sideWheelW - headWheelW) * sideness;
+    const wheelH = 9;
+    const farScale = 0.82;  // far wheel slightly smaller for depth
 
-    // wheel ellipse: width shrinks toward front/back view (edge-on = thin), height ~constant
-    const wheelW = Math.max(2.2, 8*sideness + 1.5);
-    const wheelH = 8.5;
-    const wheelTilt = Math.atan2(tay, tax || (facing*0.001));
-
-    function drawWheel(o){
+    function drawWheel(o, scale){
       ctx.save();
       ctx.translate(o.x, o.y);
-      ctx.rotate(wheelTilt);
       ctx.lineWidth=3; ctx.strokeStyle=W; ctx.fillStyle='rgba(255,255,255,0.10)';
-      ctx.beginPath(); ctx.ellipse(0,0, wheelW, wheelH, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(0,0, wheelW*scale, wheelH*scale, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
       if (sideness>0.3){
         ctx.lineWidth=1.3; ctx.strokeStyle='rgba(29,43,34,0.6)';
         for (let k=0;k<4;k++){
           const a=wheelSpin*facing + k*(Math.PI/4);
           ctx.beginPath(); ctx.moveTo(0,0);
-          ctx.lineTo(Math.cos(a)*wheelW*0.85, Math.sin(a)*wheelH*0.85); ctx.stroke();
+          ctx.lineTo(Math.cos(a)*wheelW*scale*0.85, Math.sin(a)*wheelH*scale*0.85); ctx.stroke();
         }
       }
       ctx.restore();
     }
-    drawWheel(rearO); drawWheel(frontO);
+    // draw far wheel first (higher on screen), then near wheel over it
+    drawWheel(frontO, farScale);
+    drawWheel(rearO, 1);
 
-    // Frame: built from the two hubs up to a bottom-bracket, seat and head.
-    // Vertical offsets are pure screen-up (negative y) so the bike always stands up.
-    const bb   = { x:(rearO.x+frontO.x)/2 + tax*1, y:(rearO.y+frontO.y)/2 };
-    const seat = { x:rearO.x*0.55 + frontO.x*0.10, y:(rearO.y*0.55+frontO.y*0.45) - 13 };
-    const head = { x:frontO.x*0.62, y:frontO.y - 13 };
+    // Frame: rear hub -> bottom bracket -> seat -> head tube -> front hub.
+    // Vertical lift is pure screen-up so the bike always stands upright.
+    const midX = (rearO.x+frontO.x)/2, midY=(rearO.y+frontO.y)/2;
+    const fwdX = facing * sideness;               // horizontal "forward" component
+    const bb   = { x:midX, y:midY };
+    const seat = { x:rearO.x*0.5 + frontO.x*0.0 + midX*0.5, y:midY - 13 };
+    const head = { x:frontO.x*0.6 + midX*0.4,           y:midY - 12 + (frontO.y-midY)*0.5 };
     ctx.lineWidth=3.4; ctx.strokeStyle=FRAME; ctx.lineJoin='round'; ctx.lineCap='round';
     ctx.beginPath();
     ctx.moveTo(rearO.x, rearO.y); ctx.lineTo(bb.x, bb.y);
@@ -736,19 +743,16 @@
     ctx.moveTo(head.x, head.y); ctx.lineTo(frontO.x, frontO.y);
     ctx.stroke();
 
-    // handlebars: spread perpendicular to travel axis, widest when viewed front/back
-    const barSpread = 3 + 4*(1-sideness);
-    const barPx = -tay, barPy = tax;   // perpendicular-ish
-    const plen = Math.hypot(barPx,barPy)||1;
-    const ux=barPx/plen, uy=barPy/plen;
-    const barL = { x:head.x+ux*barSpread, y:head.y+uy*barSpread };
-    const barR = { x:head.x-ux*barSpread, y:head.y-uy*barSpread };
+    // handlebars: spread horizontally, widest when viewed front/back-on
+    const barSpread = 4 + 4*(1-sideness);
+    const barL = { x:head.x + barSpread, y:head.y };
+    const barR = { x:head.x - barSpread, y:head.y };
     ctx.lineWidth=3; ctx.strokeStyle=W;
     ctx.beginPath(); ctx.moveTo(barL.x,barL.y); ctx.lineTo(barR.x,barR.y); ctx.stroke();
 
-    // Rider: hips over seat, shoulders forward+up. Always drawn standing up the screen.
-    const hip = { x:seat.x, y:seat.y - 2 };
-    const shoulder = { x:(seat.x+head.x)/2, y:(seat.y+head.y)/2 - 9 };
+    // Rider: hips over seat, shoulders up toward bars. Always upright on screen.
+    const hip = { x:(seat.x+midX)/2, y:seat.y - 1 };
+    const shoulder = { x:(seat.x*0.4+head.x*0.6), y:(seat.y+head.y)/2 - 9 };
     const bodyW = 6 + 4*(1-sideness);
     ctx.strokeStyle = toward < 0 ? SHIRT_DK : SHIRT;
     ctx.lineWidth = bodyW; ctx.lineCap='round';
@@ -759,7 +763,7 @@
     ctx.moveTo(shoulder.x,shoulder.y); ctx.lineTo(barR.x,barR.y); ctx.stroke();
 
     // head/helmet above shoulders
-    const headPos = { x:shoulder.x + tax*1.5, y:shoulder.y - 7 };
+    const headPos = { x:shoulder.x + fwdX*1.5, y:shoulder.y - 7 };
     ctx.fillStyle=W;
     ctx.beginPath(); ctx.arc(headPos.x, headPos.y, 4.6, 0, Math.PI*2); ctx.fill();
     if (toward > 0.25){
