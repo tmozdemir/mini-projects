@@ -271,10 +271,8 @@
   let checkpointIdx = 0;
 
   const bike = { x:0, y:0, vx:0, vy:0, hopTimer:0, hopping:false, hopVX:0, hopVY:0 };
-  let bikeFacing = 1, wheelSpin = 0;
-  let bikeFacingAnim = 1;  // animated -1..1, eases toward bikeFacing for smooth turn-through
-  let bikeHeading = 0;   // smoothed travel heading, radians (screen space)
-  let bikeTilt = 0;      // smoothed bank/lean amount, -1..1
+  let wheelSpin = 0;
+  let bikeHeading = -Math.PI/2;   // smoothed travel heading in screen space (-PI/2 = up/away)
   const cam = { x:0, y:0, angle:0 };
   let dust = [];
   const touch = { active:false, anchorX:0, anchorY:0, curX:0, curY:0 };
@@ -372,7 +370,7 @@
     trail = buildTrail(def);
     bike.x = trail.start.x; bike.y = trail.start.y;
     bike.vx=0; bike.vy=0; bike.hopping=false; bike.hopTimer=0; bike.hopVX=0; bike.hopVY=0;
-    bikeFacing=1; wheelSpin=0; bikeFacingAnim=1; bikeHeading=0; bikeTilt=0; dust=[]; checkpointIdx=0; failing=false;
+    wheelSpin=0; bikeHeading=-Math.PI/2; dust=[]; checkpointIdx=0; failing=false;
     const tg = tangentAt(trail.centre, 0);
     cam.angle = Math.atan2(tg.y, tg.x) + Math.PI/2;
     cam.x = bike.x; cam.y = bike.y;
@@ -526,26 +524,15 @@
 
     const speed=Math.hypot(bike.vx,bike.vy);
 
-    // smoothly track travel direction in SCREEN space (so lean reads correctly to the player)
-    if (speed > 18){
-      // rotate world velocity into screen space using current camera angle
+    // smoothly track travel direction in SCREEN space and feed the directional sprite
+    if (speed > 14){
       const ca=Math.cos(-cam.angle), sa=Math.sin(-cam.angle);
       const svx = ca*bike.vx - sa*bike.vy;
       const svy = sa*bike.vx + ca*bike.vy;
-      const targetHeading = Math.atan2(svy, svx);
-      bikeHeading = lerpAngle(bikeHeading, targetHeading, Math.min(1, 9*dt));
-      // facing: which way the bike profile points (sign of screen-x heading)
-      const desiredFacing = Math.cos(bikeHeading) >= 0 ? 1 : -1;
-      // bank toward the turn: how much heading points up/down screen
-      const targetTilt = Math.max(-1, Math.min(1, Math.sin(bikeHeading) * 1.1));
-      bikeTilt += (targetTilt - bikeTilt) * Math.min(1, 8*dt);
-      if (desiredFacing > 0) bikeFacing = 1; else bikeFacing = -1;
-    } else {
-      bikeTilt += (0 - bikeTilt) * Math.min(1, 6*dt);
+      const targetHeading = Math.atan2(svy, svx);   // 0=right, -PI/2=up screen, PI/2=down
+      bikeHeading = lerpAngle(bikeHeading, targetHeading, Math.min(1, 8*dt));
     }
-    // ease the visible facing toward target so left<->right is a smooth turn-through, not a flip
-    bikeFacingAnim += (bikeFacing - bikeFacingAnim) * Math.min(1, 10*dt);
-    wheelSpin += (speed/MAX_SPEED)*0.5*bikeFacing;
+    wheelSpin += (speed/MAX_SPEED)*0.6;
 
     if (speed>40 && !bike.hopping && Math.random()<0.6){
       dust.push({x:bike.x, y:bike.y, life:0.5, r:2+Math.random()*2});
@@ -686,24 +673,99 @@
     ctx.strokeStyle=C.flagPole; ctx.lineWidth=2; ctx.stroke();
   }
 
-  function drawBicycleShape(){
-    const W=C.bikeDark, FRAME=C.bikeFrame, SKIN=C.skin, SHIRT='#3a78c8';
-    ctx.lineWidth=3; ctx.strokeStyle=W; ctx.fillStyle='rgba(255,255,255,0.15)';
-    [-13,13].forEach(wx=>{ ctx.beginPath(); ctx.arc(wx,6,9,0,Math.PI*2); ctx.fill(); ctx.stroke(); });
-    ctx.lineWidth=1.4; ctx.strokeStyle='rgba(29,43,34,0.7)';
-    [-13,13].forEach(wx=>{ for(let k=0;k<4;k++){ const a=wheelSpin+k*(Math.PI/4); ctx.beginPath(); ctx.moveTo(wx,6); ctx.lineTo(wx+Math.cos(a)*8,6+Math.sin(a)*8); ctx.stroke(); } });
+  // ---- Directional bicycle sprite ----
+  // heading: screen-space radians (0=right, -PI/2=up/away, PI/2=down/toward, PI=left)
+  // Model: bike has a horizontal travel axis (foreshortened front/back) and a fixed
+  // vertical "stand" (rider/bars always drawn upward on screen). Quantised to 16 steps.
+  function drawDirectionalBike(heading){
+    const W=C.bikeDark, FRAME=C.bikeFrame, SKIN=C.skin, SHIRT='#3a78c8', SHIRT_DK='#2c5c9c';
+
+    const STEPS=16;
+    const q = Math.round(heading/(2*Math.PI)*STEPS)/STEPS*(2*Math.PI);
+
+    const along = Math.cos(q);          // + = travelling right, - = left
+    const depth = Math.sin(q);          // + = toward camera (down screen), - = away (up screen)
+    const sideness = Math.abs(along);   // 1 = side view, 0 = pure front/back
+    const facing = along >= 0 ? 1 : -1;
+    const toward = depth;               // -1 away (see rider's back), +1 toward (see face)
+
+    // Travel axis on screen: mostly horizontal, with a small vertical skew for the
+    // tilted camera (things moving away rise slightly up the screen).
+    const tax = facing * sideness;      // horizontal extent of the wheelbase
+    const tay = depth * 0.30;           // slight vertical skew of the wheelbase
+    const wheelSep = 13;                // half-wheelbase in bike units
+
+    // wheel hub screen offsets from centre
+    const rearO  = { x:-tax*wheelSep, y: 6 - tay*wheelSep };
+    const frontO = { x: tax*wheelSep, y: 6 + tay*wheelSep };
+
+    // wheel ellipse: width shrinks toward front/back view (edge-on = thin), height ~constant
+    const wheelW = Math.max(2.2, 8*sideness + 1.5);
+    const wheelH = 8.5;
+    const wheelTilt = Math.atan2(tay, tax || (facing*0.001));
+
+    function drawWheel(o){
+      ctx.save();
+      ctx.translate(o.x, o.y);
+      ctx.rotate(wheelTilt);
+      ctx.lineWidth=3; ctx.strokeStyle=W; ctx.fillStyle='rgba(255,255,255,0.10)';
+      ctx.beginPath(); ctx.ellipse(0,0, wheelW, wheelH, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+      if (sideness>0.3){
+        ctx.lineWidth=1.3; ctx.strokeStyle='rgba(29,43,34,0.6)';
+        for (let k=0;k<4;k++){
+          const a=wheelSpin*facing + k*(Math.PI/4);
+          ctx.beginPath(); ctx.moveTo(0,0);
+          ctx.lineTo(Math.cos(a)*wheelW*0.85, Math.sin(a)*wheelH*0.85); ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+    drawWheel(rearO); drawWheel(frontO);
+
+    // Frame: built from the two hubs up to a bottom-bracket, seat and head.
+    // Vertical offsets are pure screen-up (negative y) so the bike always stands up.
+    const bb   = { x:(rearO.x+frontO.x)/2 + tax*1, y:(rearO.y+frontO.y)/2 };
+    const seat = { x:rearO.x*0.55 + frontO.x*0.10, y:(rearO.y*0.55+frontO.y*0.45) - 13 };
+    const head = { x:frontO.x*0.62, y:frontO.y - 13 };
     ctx.lineWidth=3.4; ctx.strokeStyle=FRAME; ctx.lineJoin='round'; ctx.lineCap='round';
     ctx.beginPath();
-    ctx.moveTo(-13,6); ctx.lineTo(0,6); ctx.lineTo(-4,-6); ctx.lineTo(-13,6);
-    ctx.moveTo(0,6); ctx.lineTo(9,-7); ctx.lineTo(-4,-6);
-    ctx.moveTo(9,-7); ctx.lineTo(13,6);
+    ctx.moveTo(rearO.x, rearO.y); ctx.lineTo(bb.x, bb.y);
+    ctx.lineTo(seat.x, seat.y); ctx.lineTo(rearO.x, rearO.y);
+    ctx.moveTo(bb.x, bb.y); ctx.lineTo(head.x, head.y);
+    ctx.lineTo(seat.x, seat.y);
+    ctx.moveTo(head.x, head.y); ctx.lineTo(frontO.x, frontO.y);
     ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(9,-7); ctx.lineTo(14,-11); ctx.stroke();
-    ctx.lineWidth=3; ctx.strokeStyle=W; ctx.beginPath(); ctx.moveTo(-7,-7); ctx.lineTo(-1,-7); ctx.stroke();
-    ctx.fillStyle=SHIRT; ctx.beginPath(); ctx.moveTo(-4,-7); ctx.lineTo(9,-9); ctx.lineTo(7,-16); ctx.lineTo(-2,-13); ctx.closePath(); ctx.fill();
-    ctx.fillStyle=SKIN; ctx.beginPath(); ctx.arc(8,-19,4.2,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle=W; ctx.beginPath(); ctx.arc(8,-19,4.2,Math.PI,Math.PI*2); ctx.fill();
-    ctx.strokeStyle=SHIRT; ctx.lineWidth=2.6; ctx.beginPath(); ctx.moveTo(4,-12); ctx.lineTo(13,-10); ctx.stroke();
+
+    // handlebars: spread perpendicular to travel axis, widest when viewed front/back
+    const barSpread = 3 + 4*(1-sideness);
+    const barPx = -tay, barPy = tax;   // perpendicular-ish
+    const plen = Math.hypot(barPx,barPy)||1;
+    const ux=barPx/plen, uy=barPy/plen;
+    const barL = { x:head.x+ux*barSpread, y:head.y+uy*barSpread };
+    const barR = { x:head.x-ux*barSpread, y:head.y-uy*barSpread };
+    ctx.lineWidth=3; ctx.strokeStyle=W;
+    ctx.beginPath(); ctx.moveTo(barL.x,barL.y); ctx.lineTo(barR.x,barR.y); ctx.stroke();
+
+    // Rider: hips over seat, shoulders forward+up. Always drawn standing up the screen.
+    const hip = { x:seat.x, y:seat.y - 2 };
+    const shoulder = { x:(seat.x+head.x)/2, y:(seat.y+head.y)/2 - 9 };
+    const bodyW = 6 + 4*(1-sideness);
+    ctx.strokeStyle = toward < 0 ? SHIRT_DK : SHIRT;
+    ctx.lineWidth = bodyW; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(hip.x,hip.y); ctx.lineTo(shoulder.x,shoulder.y); ctx.stroke();
+    // arms to bars
+    ctx.lineWidth=2.6;
+    ctx.beginPath(); ctx.moveTo(shoulder.x,shoulder.y); ctx.lineTo(barL.x,barL.y);
+    ctx.moveTo(shoulder.x,shoulder.y); ctx.lineTo(barR.x,barR.y); ctx.stroke();
+
+    // head/helmet above shoulders
+    const headPos = { x:shoulder.x + tax*1.5, y:shoulder.y - 7 };
+    ctx.fillStyle=W;
+    ctx.beginPath(); ctx.arc(headPos.x, headPos.y, 4.6, 0, Math.PI*2); ctx.fill();
+    if (toward > 0.25){
+      ctx.fillStyle=SKIN;
+      ctx.beginPath(); ctx.arc(headPos.x, headPos.y+1.3, 3.2, 0.15*Math.PI, 0.85*Math.PI); ctx.fill();
+    }
   }
 
   function drawBike(){
@@ -713,21 +775,15 @@
     drawShadow({x:s.x,y:s.y}, 15*shadowScale, 7*shadowScale);
     ctx.save();
     ctx.translate(s.x, s.y-8-lift);
-
     if (bike.hopping){
-      // full tumble in the air, in facing direction
-      ctx.scale(bikeFacingAnim>=0?1:-1, 1);
-      ctx.rotate((bikeFacingAnim>=0?1:-1) * Math.min(1,bike.hopTimer/HOP_DURATION)*Math.PI*1.4);
+      // a little airborne tumble around the travel axis
+      const t = Math.min(1, bike.hopTimer/HOP_DURATION);
+      const facing = Math.cos(bikeHeading) >= 0 ? 1 : -1;
+      ctx.rotate(facing * t * Math.PI * 1.2);
+      drawDirectionalBike(bikeHeading);
     } else {
-      // horizontal scale by animated facing: narrows toward 0 mid-turn = smooth 3D-like flip
-      // clamp the magnitude so it never fully disappears (keeps a sliver of width)
-      const fx = bikeFacingAnim;
-      const mag = Math.max(0.18, Math.abs(fx));
-      ctx.scale(Math.sign(fx||1)*mag, 1);
-      // bank lean: tilt the whole bike toward where it's heading on screen
-      ctx.rotate(-bikeTilt * 0.5 * Math.sign(fx||1));
+      drawDirectionalBike(bikeHeading);
     }
-    drawBicycleShape();
     ctx.restore();
   }
 
