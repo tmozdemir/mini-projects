@@ -193,8 +193,8 @@
     {
       id:1, name:'Meadow Climb',
       centre:[
-        [190,2000],[210,1820],[150,1640],[180,1460],[250,1300],
-        [220,1120],[150,980],[190,820],[260,680],[230,520],[180,380],[210,230]
+        [190,2000],[205,1820],[180,1640],[195,1460],[230,1300],
+        [215,1120],[180,980],[200,820],[240,680],[220,520],[195,380],[210,230]
       ],
       scenery:[
         {type:'cones', t:0.16, n:5},
@@ -213,8 +213,8 @@
     {
       id:2, name:'Switchbacks',
       centre:[
-        [190,2200],[150,2020],[240,1880],[300,1700],[210,1560],[120,1420],
-        [200,1260],[300,1140],[230,980],[140,840],[230,700],[300,560],[220,420],[190,250]
+        [190,2200],[165,2020],[215,1880],[250,1700],[205,1560],[160,1420],
+        [200,1260],[250,1140],[215,980],[165,840],[215,700],[250,560],[210,420],[190,250]
       ],
       scenery:[
         {type:'cones', t:0.12, n:5},
@@ -439,6 +439,7 @@
     touch.active=true;
     const p=pointFromEvent(e);
     touch.anchorX=p.x; touch.anchorY=p.y; touch.curX=p.x; touch.curY=p.y;
+    touch.refAngle = cam.angle;   // lock the steering frame to the camera at grab time
     try{ els.touchLayer.setPointerCapture(e.pointerId); }catch(err){}
   }
   function pointerMove(e){
@@ -463,9 +464,10 @@
   els.endMenuBtn.addEventListener('click', quitToMenu);
   els.endNextBtn.addEventListener('click', ()=>{ if (trail.id<TRAILS.length) startTrail(trail.id+1); });
 
-  // drag (screen space) -> world space using camera angle
+  // drag (screen space) -> world space using the steering reference frame
   function dragToWorld(dx, dy){
-    const ca = Math.cos(cam.angle), sa = Math.sin(cam.angle);
+    const ang = (touch.refAngle !== undefined) ? touch.refAngle : cam.angle;
+    const ca = Math.cos(ang), sa = Math.sin(ang);
     return { wx: ca*dx + sa*dy, wy: -sa*dx + ca*dy };
   }
 
@@ -497,6 +499,10 @@
     if (bike.hopping){
       bike.vx=bike.hopVX; bike.vy=bike.hopVY;
     } else if (touch.active){
+      // ease the steering frame toward the live camera very slowly (no perceptible twist)
+      if (touch.refAngle !== undefined){
+        touch.refAngle = lerpAngle(touch.refAngle, cam.angle, Math.min(1, 0.6*dt));
+      }
       const dx=touch.curX-touch.anchorX, dy=touch.curY-touch.anchorY;
       const dragDist=Math.hypot(dx,dy);
       const speedFrac=Math.max(0,Math.min(1,dragDist/MAX_DRAG));
@@ -542,9 +548,15 @@
       triggerFail();
     }
 
-    const tg = tangentAt(trail.centre, near.sample.u);
-    const targetAngle = Math.atan2(tg.y, tg.x) + Math.PI/2;
-    cam.angle = lerpAngle(cam.angle, targetAngle, Math.min(1, 3*dt));
+    // average the path direction over a look-ahead window so the camera
+    // follows the overall flow rather than every little wiggle
+    let aimX=0, aimY=0;
+    for (let du=0; du<=1.2; du+=0.3){
+      const t = tangentAt(trail.centre, Math.min(trail.N-1, near.sample.u + du));
+      aimX += t.x; aimY += t.y;
+    }
+    const targetAngle = Math.atan2(aimY, aimX) + Math.PI/2;
+    cam.angle = lerpAngle(cam.angle, targetAngle, Math.min(1, 1.1*dt));
     cam.x += (bike.x-cam.x)*Math.min(1,10*dt);
     cam.y += (bike.y-cam.y)*Math.min(1,10*dt);
 
