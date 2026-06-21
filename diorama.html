@@ -272,6 +272,9 @@
 
   const bike = { x:0, y:0, vx:0, vy:0, hopTimer:0, hopping:false, hopVX:0, hopVY:0 };
   let bikeFacing = 1, wheelSpin = 0;
+  let bikeFacingAnim = 1;  // animated -1..1, eases toward bikeFacing for smooth turn-through
+  let bikeHeading = 0;   // smoothed travel heading, radians (screen space)
+  let bikeTilt = 0;      // smoothed bank/lean amount, -1..1
   const cam = { x:0, y:0, angle:0 };
   let dust = [];
   const touch = { active:false, anchorX:0, anchorY:0, curX:0, curY:0 };
@@ -369,7 +372,7 @@
     trail = buildTrail(def);
     bike.x = trail.start.x; bike.y = trail.start.y;
     bike.vx=0; bike.vy=0; bike.hopping=false; bike.hopTimer=0; bike.hopVX=0; bike.hopVY=0;
-    bikeFacing=1; wheelSpin=0; dust=[]; checkpointIdx=0; failing=false;
+    bikeFacing=1; wheelSpin=0; bikeFacingAnim=1; bikeHeading=0; bikeTilt=0; dust=[]; checkpointIdx=0; failing=false;
     const tg = tangentAt(trail.centre, 0);
     cam.angle = Math.atan2(tg.y, tg.x) + Math.PI/2;
     cam.x = bike.x; cam.y = bike.y;
@@ -521,8 +524,27 @@
     bike.x += bike.vx*dt;
     bike.y += bike.vy*dt;
 
-    if (bike.vx>8) bikeFacing=1; else if (bike.vx<-8) bikeFacing=-1;
     const speed=Math.hypot(bike.vx,bike.vy);
+
+    // smoothly track travel direction in SCREEN space (so lean reads correctly to the player)
+    if (speed > 18){
+      // rotate world velocity into screen space using current camera angle
+      const ca=Math.cos(-cam.angle), sa=Math.sin(-cam.angle);
+      const svx = ca*bike.vx - sa*bike.vy;
+      const svy = sa*bike.vx + ca*bike.vy;
+      const targetHeading = Math.atan2(svy, svx);
+      bikeHeading = lerpAngle(bikeHeading, targetHeading, Math.min(1, 9*dt));
+      // facing: which way the bike profile points (sign of screen-x heading)
+      const desiredFacing = Math.cos(bikeHeading) >= 0 ? 1 : -1;
+      // bank toward the turn: how much heading points up/down screen
+      const targetTilt = Math.max(-1, Math.min(1, Math.sin(bikeHeading) * 1.1));
+      bikeTilt += (targetTilt - bikeTilt) * Math.min(1, 8*dt);
+      if (desiredFacing > 0) bikeFacing = 1; else bikeFacing = -1;
+    } else {
+      bikeTilt += (0 - bikeTilt) * Math.min(1, 6*dt);
+    }
+    // ease the visible facing toward target so left<->right is a smooth turn-through, not a flip
+    bikeFacingAnim += (bikeFacing - bikeFacingAnim) * Math.min(1, 10*dt);
     wheelSpin += (speed/MAX_SPEED)*0.5*bikeFacing;
 
     if (speed>40 && !bike.hopping && Math.random()<0.6){
@@ -691,9 +713,20 @@
     drawShadow({x:s.x,y:s.y}, 15*shadowScale, 7*shadowScale);
     ctx.save();
     ctx.translate(s.x, s.y-8-lift);
-    ctx.scale(bikeFacing,1);
-    if (bike.hopping){ ctx.rotate(Math.min(1,bike.hopTimer/HOP_DURATION)*Math.PI*1.4); }
-    else { const sp=Math.hypot(bike.vx,bike.vy); ctx.rotate(-Math.max(-0.25,Math.min(0.25,(sp/MAX_SPEED)*0.2))); }
+
+    if (bike.hopping){
+      // full tumble in the air, in facing direction
+      ctx.scale(bikeFacingAnim>=0?1:-1, 1);
+      ctx.rotate((bikeFacingAnim>=0?1:-1) * Math.min(1,bike.hopTimer/HOP_DURATION)*Math.PI*1.4);
+    } else {
+      // horizontal scale by animated facing: narrows toward 0 mid-turn = smooth 3D-like flip
+      // clamp the magnitude so it never fully disappears (keeps a sliver of width)
+      const fx = bikeFacingAnim;
+      const mag = Math.max(0.18, Math.abs(fx));
+      ctx.scale(Math.sign(fx||1)*mag, 1);
+      // bank lean: tilt the whole bike toward where it's heading on screen
+      ctx.rotate(-bikeTilt * 0.5 * Math.sign(fx||1));
+    }
     drawBicycleShape();
     ctx.restore();
   }
