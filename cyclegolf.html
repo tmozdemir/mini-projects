@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Cycle Golf</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800&display=swap');
+
+  :root{
+    --bg:#0d1410;
+    --panel:#121c16;
+    --panel-2:#1a261e;
+    --line:#33453a;
+    --bone:#e8e4d8;
+    --dim:#7c8a7e;
+    --green:#5fd97a;
+    --green-dim:#1f3d28;
+    --red:#ff6b4a;
+    --amber:#e8b84a;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:none;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    background:radial-gradient(ellipse at 50% 0%, #16241a 0%, var(--bg) 60%);
+    color:var(--bone);
+    font-family:'IBM Plex Mono', ui-monospace, monospace;
+    min-height:100vh;
+    display:flex; align-items:center; justify-content:center;
+    padding:16px 12px;
+    overscroll-behavior:none;
+  }
+  .scope{ width:100%; max-width:440px; }
+  .crt-frame{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:18px;
+    box-shadow:0 0 0 1px rgba(95,217,122,0.06), 0 30px 60px -20px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.03);
+    overflow:hidden;
+  }
+  .statusbar{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:12px 16px; border-bottom:1px solid var(--line);
+    font-size:0.7rem; letter-spacing:0.08em; color:var(--dim); text-transform:uppercase;
+  }
+  .statusbar .label{ display:flex; align-items:center; gap:8px; }
+  .dot-led{ width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green); animation:pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+  .hidden{ display:none !important; }
+
+  .screen{ padding:26px 20px; }
+  .screen-title{ font-size:0.66rem; letter-spacing:0.13em; color:var(--dim); text-transform:uppercase; margin-bottom:6px; text-align:center; }
+  .screen-sub{ font-size:0.8rem; color:var(--dim); text-align:center; margin-bottom:22px; line-height:1.5; }
+
+  .level-card{
+    display:flex; align-items:center; gap:14px;
+    background:var(--panel-2); border:1px solid var(--line); border-radius:10px;
+    padding:14px 16px; margin-bottom:10px; cursor:pointer;
+  }
+  .level-card.locked{ opacity:0.4; pointer-events:none; }
+  .level-card .num{
+    width:34px; height:34px; flex-shrink:0; border-radius:50%;
+    border:1px solid var(--green); color:var(--green);
+    display:flex; align-items:center; justify-content:center; font-weight:700;
+  }
+  .level-card .meta{ flex:1; }
+  .level-card .name{ font-size:0.92rem; font-weight:700; color:var(--bone); }
+  .level-card .theme{ font-size:0.7rem; color:var(--dim); margin-top:2px; }
+  .level-card .best{ font-size:0.68rem; color:var(--amber); margin-top:3px; }
+  .level-card .arrow{ color:var(--dim); font-size:1.1rem; }
+
+  .control-help{
+    border:1px solid var(--line); border-radius:10px; padding:14px;
+    font-size:0.72rem; color:var(--dim); line-height:1.6; margin-top:18px;
+  }
+  .control-help b{ color:var(--bone); }
+
+  .game-wrap{ position:relative; line-height:0; }
+  #gameCanvas{ width:100%; display:block; }
+  .touch-layer{ position:absolute; inset:0; z-index:5; }
+  .hud{
+    position:absolute; top:0; left:0; right:0; z-index:6;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    padding:10px 12px; pointer-events:none;
+  }
+  .hud-chip{
+    background:rgba(13,20,16,0.7); border:1px solid rgba(95,217,122,0.4);
+    border-radius:6px; padding:5px 9px; font-size:0.68rem; color:var(--green);
+    letter-spacing:0.04em; font-family:'IBM Plex Mono',monospace;
+  }
+  .quit-btn{
+    position:absolute; bottom:10px; left:10px; z-index:6;
+    background:rgba(13,20,16,0.75); border:1px solid var(--line); color:var(--dim);
+    font-family:'IBM Plex Mono',monospace; font-size:0.65rem; letter-spacing:0.05em; text-transform:uppercase;
+    padding:7px 11px; border-radius:6px; pointer-events:auto;
+  }
+  .toast{
+    position:absolute; top:42%; left:50%; transform:translate(-50%,-50%);
+    z-index:8; background:rgba(20,10,8,0.88); border:1px solid var(--red);
+    color:var(--red); font-weight:700; letter-spacing:0.08em; text-transform:uppercase;
+    font-size:0.85rem; padding:10px 18px; border-radius:8px; opacity:0; pointer-events:none;
+    transition:opacity 0.15s ease; font-family:'IBM Plex Mono',monospace;
+  }
+  .toast.show{ opacity:1; }
+  .start-overlay{
+    position:absolute; inset:0; z-index:9; background:rgba(8,12,9,0.82);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:30px;
+  }
+  .start-overlay .big{ font-size:1.4rem; margin-bottom:14px; }
+  .start-overlay .tip{ font-size:0.78rem; color:var(--dim); line-height:1.7; margin-bottom:22px; max-width:280px; }
+  .start-overlay .tip b{ color:var(--amber); }
+  .go-btn{
+    background:var(--green-dim); border:1px solid var(--green); color:var(--green);
+    font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:0.8rem; letter-spacing:0.06em;
+    text-transform:uppercase; padding:13px 26px; border-radius:10px;
+  }
+
+  .end-screen{ padding:40px 24px; text-align:center; }
+  .end-screen .big-icon{ font-size:2.6rem; margin-bottom:10px; }
+  .end-screen .result{ font-size:1.25rem; font-weight:700; color:var(--green); margin-bottom:6px; }
+  .end-screen .time{ font-size:1rem; color:var(--amber); margin-bottom:6px; }
+  .end-screen .best{ font-size:0.78rem; color:var(--dim); margin-bottom:24px; }
+  .end-row{ display:flex; gap:10px; }
+  .end-btn{
+    flex:1; font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:0.78rem; letter-spacing:0.05em;
+    text-transform:uppercase; padding:13px 0; border-radius:10px; cursor:pointer;
+  }
+  .end-btn.primary{ background:var(--green-dim); border:1px solid var(--green); color:var(--green); }
+  .end-btn.ghost{ background:var(--panel-2); border:1px solid var(--line); color:var(--dim); }
+</style>
+</head>
+<body>
+
+<div class="scope">
+  <div class="crt-frame">
+
+    <div class="statusbar">
+      <div class="label"><a href="index.html" style="color:var(--dim); text-decoration:none;">&larr;</a> <span class="dot-led"></span> CYCLE GOLF</div>
+      <div id="statusRight"></div>
+    </div>
+
+    <div id="selectScreen" class="screen">
+      <div class="screen-title">Cycle Golf</div>
+      <div class="screen-sub">Pedal to the flag. Tap to hop, hold a beat longer for a bigger jump.</div>
+      <div id="levelList"></div>
+      <div class="control-help">
+        <b>The bike pedals on its own.</b><br>
+        <b>Tap</b> &mdash; small hop.<br>
+        <b>Hold a little longer</b> &mdash; bigger jump, for wider gaps.<br>
+        Mistime it and fall short? You'll respawn at the start &mdash; no penalty, just try again.
+      </div>
+    </div>
+
+    <div id="gameScreen" class="hidden">
+      <div class="game-wrap">
+        <canvas id="gameCanvas" width="400" height="320"></canvas>
+        <div class="hud">
+          <div class="hud-chip" id="timeChip">0.0s</div>
+          <div class="hud-chip" id="bestChip"></div>
+        </div>
+        <div class="touch-layer" id="touchLayer"></div>
+        <button class="quit-btn" id="quitBtn">⏏ Quit</button>
+        <div class="toast" id="toast">Splash!</div>
+        <div class="start-overlay" id="startOverlay">
+          <div class="big" id="overlayTitle">First Pedal</div>
+          <div class="tip">The bike rides on its own. <b>Tap</b> for a small hop, <b>hold a little longer</b> for a bigger jump to clear wider gaps. Reach the flag!</div>
+          <button class="go-btn" id="goBtn">Touch to Ride</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="endScreen" class="end-screen hidden">
+      <div class="big-icon">🚩</div>
+      <div class="result">FLAG REACHED</div>
+      <div class="time" id="finishTime">0.0s</div>
+      <div class="best" id="finishBest"></div>
+      <div class="end-row">
+        <button class="end-btn ghost" id="endMenuBtn">Menu</button>
+        <button class="end-btn primary" id="endNextBtn">Next Course</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  /* ======================= CONSTANTS ======================= */
+  const CANVAS_W = 400, CANVAS_H = 320;
+  const GRAVITY        = 1400;   // px/s^2
+  const BASE_SPEED     = 170;    // px/s, constant forward pedal speed
+  const MIN_JUMP_VEL    = 260;
+  const MAX_JUMP_VEL    = 640;
+  const MAX_CHARGE_TIME = 0.55;  // seconds held = full charge
+  const DEATH_MARGIN    = 260;   // px below lowest ground before respawn triggers
+  const BIKE_RADIUS     = 11;
+  const CAM_LERP        = 0.07;
+
+  /* ======================= THEME (flat / WTG-ish) ======================= */
+  const PALETTE = {
+    skyTop: '#aee3f0', skyBottom: '#e9f7ee',
+    ground: '#8bd17c', groundEdge: '#5fae54',
+    dirt: '#caa46b',
+    outline: '#1d2b22',
+    void1: '#cfe9ee', void2: '#e3f3f6',
+    bikeBody: '#ff7a59', bikeWheel: '#1d2b22',
+    flagPole: '#1d2b22', flagCloth: '#ff5d5d',
+    cloud: '#ffffff'
+  };
+
+  /* ======================= LEVEL DATA =======================
+     Each level is a list of "platforms" (contiguous ground polylines).
+     Gaps are implicit: the empty x-range between one platform's end
+     and the next platform's start.
+  */
+  function P(x,y){ return {x,y}; }
+
+  const LEVELS = [
+    {
+      id:1, name:'First Pedal',
+      platforms:[
+        [P(0,240),P(160,240),P(260,190),P(380,225)],
+        [P(450,230),P(610,230),P(700,185),P(800,205)],
+        [P(860,210),P(1000,210)]
+      ],
+      start:{x:30,y:230}, flag:{x:970,y:210}
+    },
+    {
+      id:2, name:'The Chasm',
+      platforms:[
+        [P(0,235),P(200,235),P(300,200)],
+        [P(350,210),P(450,210)],
+        [P(580,225),P(640,225)],
+        [P(745,215),P(935,215),P(995,195)]
+      ],
+      start:{x:30,y:225}, flag:{x:970,y:195}
+    },
+    {
+      id:3, name:'Rolling Hills',
+      platforms:[
+        [P(0,230),P(150,230),P(250,145),P(350,175)],
+        [P(415,185),P(500,135),P(600,165)],
+        [P(700,225),P(850,225),P(950,205)]
+      ],
+      start:{x:30,y:220}, flag:{x:920,y:205}
+    }
+  ];
+
+  /* ======================= LEVEL BUILD ======================= */
+  function buildLevel(def){
+    const platforms = def.platforms;
+    let minY = Infinity, maxY = -Infinity, maxX = 0;
+    platforms.forEach(plat=>{
+      plat.forEach(p=>{
+        minY = Math.min(minY, p.y);
+        maxY = Math.max(maxY, p.y);
+        maxX = Math.max(maxX, p.x);
+      });
+    });
+    return { platforms, start:def.start, flag:def.flag, name:def.name, id:def.id, minY, maxY, maxX };
+  }
+
+  // Returns ground Y at world x, or null if x is over a gap / off the level
+  function groundYAt(level, x){
+    for (const plat of level.platforms){
+      const first = plat[0], last = plat[plat.length-1];
+      if (x < first.x || x > last.x) continue;
+      for (let i=0; i<plat.length-1; i++){
+        const a = plat[i], b = plat[i+1];
+        if (x >= a.x && x <= b.x){
+          const t = (b.x - a.x) === 0 ? 0 : (x - a.x) / (b.x - a.x);
+          return a.y + (b.y - a.y) * t;
+        }
+      }
+    }
+    return null;
+  }
+
+  /* ======================= STATE ======================= */
+  const els = {
+    statusRight: document.getElementById('statusRight'),
+    selectScreen: document.getElementById('selectScreen'),
+    gameScreen: document.getElementById('gameScreen'),
+    endScreen: document.getElementById('endScreen'),
+    levelList: document.getElementById('levelList'),
+    canvas: document.getElementById('gameCanvas'),
+    touchLayer: document.getElementById('touchLayer'),
+    timeChip: document.getElementById('timeChip'),
+    bestChip: document.getElementById('bestChip'),
+    toast: document.getElementById('toast'),
+    startOverlay: document.getElementById('startOverlay'),
+    overlayTitle: document.getElementById('overlayTitle'),
+    goBtn: document.getElementById('goBtn'),
+    quitBtn: document.getElementById('quitBtn'),
+    finishTime: document.getElementById('finishTime'),
+    finishBest: document.getElementById('finishBest'),
+    endMenuBtn: document.getElementById('endMenuBtn'),
+    endNextBtn: document.getElementById('endNextBtn'),
+  };
+  const ctx = els.canvas.getContext('2d');
+
+  const PROGRESS_KEY = 'cyclegolf_progress_v1';
+  function loadProgress(){
+    try { return JSON.parse(localStorage.getItem(PROGRESS_KEY)) || {unlocked:1, best:{}}; }
+    catch(e){ return {unlocked:1, best:{}}; }
+  }
+  function saveProgress(p){ try{ localStorage.setItem(PROGRESS_KEY, JSON.stringify(p)); }catch(e){} }
+  let progress = loadProgress();
+
+  let level = null;
+  let running = false, started = false;
+  let elapsed = 0;
+  let rafId = null;
+
+  const bike = { x:0, y:0, vy:0, grounded:true, charging:false, chargeStart:0 };
+  const cam = { x:0, y:0 };
+  let clouds = [];
+
+  /* ======================= LEVEL SELECT UI ======================= */
+  function renderLevelList(){
+    els.levelList.innerHTML = '';
+    LEVELS.forEach(lvl=>{
+      const unlocked = lvl.id <= progress.unlocked;
+      const card = document.createElement('div');
+      card.className = 'level-card' + (unlocked ? '' : ' locked');
+      const best = progress.best[lvl.id];
+      card.innerHTML = `
+        <div class="num">${unlocked ? lvl.id : '🔒'}</div>
+        <div class="meta">
+          <div class="name">${lvl.name}</div>
+          <div class="theme">${lvl.platforms.length - 1} gap${lvl.platforms.length-1===1?'':'s'} to clear</div>
+          ${best ? `<div class="best">Best: ${best.toFixed(1)}s</div>` : ''}
+        </div>
+        <div class="arrow">▶</div>
+      `;
+      if (unlocked) card.addEventListener('click', ()=> startLevel(lvl.id));
+      els.levelList.appendChild(card);
+    });
+  }
+  renderLevelList();
+
+  /* ======================= LIFECYCLE ======================= */
+  function startLevel(id){
+    const def = LEVELS.find(l=>l.id===id);
+    level = buildLevel(def);
+    bike.x = level.start.x; bike.y = level.start.y;
+    bike.vy = 0; bike.grounded = true; bike.charging = false;
+    cam.x = bike.x - CANVAS_W*0.28;
+    cam.y = bike.y - CANVAS_H*0.55;
+    elapsed = 0;
+    started = false;
+
+    clouds = [];
+    for (let i=0;i<6;i++){
+      clouds.push({ x: Math.random()*level.maxX*1.3, y: 30+Math.random()*70, s: 0.6+Math.random()*0.8 });
+    }
+
+    els.overlayTitle.textContent = level.name;
+    els.startOverlay.classList.remove('hidden');
+    els.selectScreen.classList.add('hidden');
+    els.endScreen.classList.add('hidden');
+    els.gameScreen.classList.remove('hidden');
+    els.statusRight.textContent = level.name.toUpperCase();
+    const best = progress.best[level.id];
+    els.bestChip.textContent = best ? ('best ' + best.toFixed(1) + 's') : '';
+
+    running = true;
+    if (!rafId) loop(performance.now());
+  }
+
+  function quitToMenu(){
+    running = false; started = false;
+    if (rafId){ cancelAnimationFrame(rafId); rafId = null; }
+    els.gameScreen.classList.add('hidden');
+    els.endScreen.classList.add('hidden');
+    els.selectScreen.classList.remove('hidden');
+    renderLevelList();
+    els.statusRight.textContent = '';
+  }
+
+  function completeLevel(){
+    running = false;
+    const t = elapsed;
+    const prevBest = progress.best[level.id];
+    if (!prevBest || t < prevBest) progress.best[level.id] = t;
+    if (progress.unlocked === level.id && level.id < LEVELS.length){
+      progress.unlocked = level.id + 1;
+    }
+    saveProgress(progress);
+
+    els.finishTime.textContent = t.toFixed(1) + 's';
+    els.finishBest.textContent = progress.best[level.id] < t || (prevBest && prevBest <= t)
+      ? ('Best: ' + progress.best[level.id].toFixed(1) + 's')
+      : 'New best!';
+    const hasNext = level.id < LEVELS.length;
+    els.endNextBtn.classList.toggle('hidden', !hasNext);
+    els.gameScreen.classList.add('hidden');
+    els.endScreen.classList.remove('hidden');
+  }
+
+  let toastTimer = null;
+  function showToast(msg){
+    els.toast.textContent = msg;
+    els.toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=> els.toast.classList.remove('show'), 800);
+  }
+
+  function respawn(){
+    bike.x = level.start.x; bike.y = level.start.y;
+    bike.vy = 0; bike.grounded = true; bike.charging = false;
+    elapsed = 0;
+    showToast('Splash! Try again');
+  }
+
+  /* ======================= INPUT ======================= */
+  function pointerDown(e){
+    if (!started){ started = true; els.startOverlay.classList.add('hidden'); }
+    if (bike.grounded && !bike.charging){
+      bike.charging = true;
+      bike.chargeStart = performance.now();
+    }
+  }
+  function pointerUp(e){
+    if (bike.charging){
+      const held = (performance.now() - bike.chargeStart) / 1000;
+      const frac = Math.max(0, Math.min(1, held / MAX_CHARGE_TIME));
+      const jumpVel = MIN_JUMP_VEL + (MAX_JUMP_VEL - MIN_JUMP_VEL) * frac;
+      bike.vy = -jumpVel;
+      bike.grounded = false;
+      bike.charging = false;
+    }
+  }
+  els.touchLayer.addEventListener('pointerdown', pointerDown);
+  els.touchLayer.addEventListener('pointerup', pointerUp);
+  els.touchLayer.addEventListener('pointercancel', pointerUp);
+  els.goBtn.addEventListener('click', ()=>{ started = true; els.startOverlay.classList.add('hidden'); });
+  els.quitBtn.addEventListener('click', quitToMenu);
+  els.endMenuBtn.addEventListener('click', quitToMenu);
+  els.endNextBtn.addEventListener('click', ()=>{ if (level.id < LEVELS.length) startLevel(level.id + 1); });
+
+  /* ======================= PHYSICS ======================= */
+  function update(dt){
+    if (!running || !started) return;
+    elapsed += dt;
+
+    bike.x += BASE_SPEED * dt;
+
+    bike.vy += GRAVITY * dt;
+    const nextY = bike.y + bike.vy * dt;
+    const gY = groundYAt(level, bike.x);
+
+    if (gY !== null && nextY >= gY && bike.vy >= 0){
+      bike.y = gY;
+      bike.vy = 0;
+      bike.grounded = true;
+    } else {
+      bike.y = nextY;
+      bike.grounded = false;
+    }
+
+    const deathLine = level.maxY + DEATH_MARGIN;
+    if (bike.y > deathLine){ respawn(); return; }
+
+    if (bike.x >= level.flag.x){ completeLevel(); return; }
+
+    cam.x = bike.x - CANVAS_W*0.28;
+    const targetCamY = bike.y - CANVAS_H*0.55;
+    cam.y += (targetCamY - cam.y) * Math.min(1, CAM_LERP*60*dt);
+
+    els.timeChip.textContent = elapsed.toFixed(1) + 's';
+  }
+
+  /* ======================= RENDER ======================= */
+  function drawSky(){
+    const grad = ctx.createLinearGradient(0,0,0,CANVAS_H);
+    grad.addColorStop(0, PALETTE.skyTop);
+    grad.addColorStop(1, PALETTE.skyBottom);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
+  }
+
+  function drawCloud(wx, wy, scale){
+    const sx = wx - cam.x*0.5;
+    const sy = wy - cam.y*0.15;
+    ctx.save();
+    ctx.translate(sx, sy);
+    ctx.scale(scale, scale);
+    ctx.fillStyle = PALETTE.cloud;
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    ctx.ellipse(0,0,22,13,0,0,Math.PI*2);
+    ctx.ellipse(18,-6,16,11,0,0,Math.PI*2);
+    ctx.ellipse(-18,-4,14,10,0,0,Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawPlatform(plat){
+    ctx.beginPath();
+    ctx.moveTo(plat[0].x - cam.x, plat[0].y - cam.y);
+    for (let i=1;i<plat.length;i++) ctx.lineTo(plat[i].x - cam.x, plat[i].y - cam.y);
+    ctx.lineTo(plat[plat.length-1].x - cam.x, CANVAS_H + 60);
+    ctx.lineTo(plat[0].x - cam.x, CANVAS_H + 60);
+    ctx.closePath();
+    ctx.fillStyle = PALETTE.dirt;
+    ctx.fill();
+
+    // grass cap
+    ctx.beginPath();
+    ctx.moveTo(plat[0].x - cam.x, plat[0].y - cam.y);
+    for (let i=1;i<plat.length;i++) ctx.lineTo(plat[i].x - cam.x, plat[i].y - cam.y);
+    ctx.lineTo(plat[plat.length-1].x - cam.x, plat[plat.length-1].y - cam.y + 14);
+    ctx.lineTo(plat[0].x - cam.x, plat[0].y - cam.y + 14);
+    ctx.closePath();
+    ctx.fillStyle = PALETTE.ground;
+    ctx.fill();
+
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = PALETTE.outline;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(plat[0].x - cam.x, plat[0].y - cam.y);
+    for (let i=1;i<plat.length;i++) ctx.lineTo(plat[i].x - cam.x, plat[i].y - cam.y);
+    ctx.stroke();
+  }
+
+  function drawFlag(){
+    const fx = level.flag.x - cam.x;
+    const fy = level.flag.y - cam.y;
+    ctx.strokeStyle = PALETTE.flagPole;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(fx, fy); ctx.lineTo(fx, fy-58);
+    ctx.stroke();
+    ctx.fillStyle = PALETTE.flagCloth;
+    ctx.beginPath();
+    ctx.moveTo(fx, fy-58);
+    ctx.lineTo(fx+26, fy-49);
+    ctx.lineTo(fx, fy-40);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = PALETTE.outline;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+  }
+
+  function drawBike(){
+    const bx = bike.x - cam.x;
+    const by = bike.y - cam.y;
+
+    let chargeFrac = 0;
+    if (bike.charging){
+      chargeFrac = Math.max(0, Math.min(1, (performance.now()-bike.chargeStart)/1000/MAX_CHARGE_TIME));
+    }
+    const squashY = 1 - 0.22*chargeFrac;
+    const squashX = 1 + 0.14*chargeFrac;
+    const lean = Math.max(-0.5, Math.min(0.5, -bike.vy/900));
+
+    ctx.save();
+    ctx.translate(bx, by - BIKE_RADIUS*0.9);
+    ctx.rotate(lean*0.35);
+    ctx.scale(squashX, squashY);
+
+    // wheels
+    ctx.fillStyle = PALETTE.bikeWheel;
+    ctx.beginPath(); ctx.ellipse(-12,9,7,7,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(12,9,7,7,0,0,Math.PI*2); ctx.fill();
+
+    // body blob
+    ctx.fillStyle = PALETTE.bikeBody;
+    ctx.strokeStyle = PALETTE.outline;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.ellipse(0,0,13,13,0,0,Math.PI*2);
+    ctx.fill(); ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function render(){
+    drawSky();
+    clouds.forEach(c=> drawCloud(c.x, c.y, c.s));
+    level.platforms.forEach(drawPlatform);
+    drawFlag();
+    drawBike();
+  }
+
+  /* ======================= LOOP ======================= */
+  let lastTs = 0;
+  function loop(ts){
+    rafId = requestAnimationFrame(loop);
+    const dt = Math.min(0.05, (ts - lastTs)/1000 || 0);
+    lastTs = ts;
+    if (running){
+      update(dt);
+      render();
+    }
+  }
+})();
+</script>
+
+</body>
+</html>
