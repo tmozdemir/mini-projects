@@ -6,33 +6,21 @@
 <title>Open Trail</title>
 <style>
   :root{
-    --bg:#0d1410;
-    --panel:#121c16;
-    --panel-2:#1a261e;
-    --line:#33453a;
-    --bone:#e8e4d8;
-    --dim:#7c8a7e;
-    --green:#5fd97a;
-    --green-dim:#1f3d28;
-    --red:#ff6b4a;
-    --amber:#e8b84a;
+    --bg:#0d1410; --panel:#121c16; --panel-2:#1a261e; --line:#33453a;
+    --bone:#e8e4d8; --dim:#7c8a7e; --green:#5fd97a; --green-dim:#1f3d28;
+    --red:#ff6b4a; --amber:#e8b84a;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:none;}
   html,body{margin:0;padding:0;height:100%;}
   body{
     background:radial-gradient(ellipse at 50% 0%, #16241a 0%, var(--bg) 60%);
-    color:var(--bone);
-    font-family:'IBM Plex Mono', ui-monospace, monospace;
-    min-height:100vh;
-    display:flex; align-items:center; justify-content:center;
-    padding:16px 12px;
-    overscroll-behavior:none;
+    color:var(--bone); font-family:'IBM Plex Mono', ui-monospace, monospace;
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    padding:16px 12px; overscroll-behavior:none;
   }
   .scope{ width:100%; max-width:440px; }
   .crt-frame{
-    background:var(--panel);
-    border:1px solid var(--line);
-    border-radius:18px;
+    background:var(--panel); border:1px solid var(--line); border-radius:18px;
     box-shadow:0 0 0 1px rgba(95,217,122,0.06), 0 30px 60px -20px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.03);
     overflow:hidden;
   }
@@ -51,15 +39,13 @@
   .screen-sub{ font-size:0.8rem; color:var(--dim); text-align:center; margin-bottom:22px; line-height:1.5; }
 
   .level-card{
-    display:flex; align-items:center; gap:14px;
-    background:var(--panel-2); border:1px solid var(--line); border-radius:10px;
-    padding:14px 16px; margin-bottom:10px; cursor:pointer;
+    display:flex; align-items:center; gap:14px; background:var(--panel-2);
+    border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:10px; cursor:pointer;
   }
   .level-card.locked{ opacity:0.4; pointer-events:none; }
   .level-card .num{
-    width:34px; height:34px; flex-shrink:0; border-radius:50%;
-    border:1px solid var(--green); color:var(--green);
-    display:flex; align-items:center; justify-content:center; font-weight:700;
+    width:34px; height:34px; flex-shrink:0; border-radius:50%; border:1px solid var(--green);
+    color:var(--green); display:flex; align-items:center; justify-content:center; font-weight:700;
   }
   .level-card .meta{ flex:1; }
   .level-card .name{ font-size:0.92rem; font-weight:700; color:var(--bone); }
@@ -78,24 +64,28 @@
   .touch-layer{ position:absolute; inset:0; z-index:5; }
   .hud{
     position:absolute; top:0; left:0; right:0; z-index:6;
-    display:flex; justify-content:space-between; align-items:flex-start;
-    padding:10px 12px; pointer-events:none;
+    display:flex; justify-content:space-between; align-items:flex-start; padding:10px 12px; pointer-events:none;
   }
   .hud-chip{
-    background:rgba(13,20,16,0.7); border:1px solid rgba(95,217,122,0.4);
-    border-radius:6px; padding:5px 9px; font-size:0.68rem; color:var(--green);
-    letter-spacing:0.04em; font-family:'IBM Plex Mono',monospace;
+    background:rgba(13,20,16,0.7); border:1px solid rgba(95,217,122,0.4); border-radius:6px;
+    padding:5px 9px; font-size:0.68rem; color:var(--green); letter-spacing:0.04em; font-family:'IBM Plex Mono',monospace;
   }
   .quit-btn{
-    position:absolute; bottom:10px; left:10px; z-index:6;
-    background:rgba(13,20,16,0.75); border:1px solid var(--line); color:var(--dim);
-    font-family:'IBM Plex Mono',monospace; font-size:0.65rem; letter-spacing:0.05em; text-transform:uppercase;
-    padding:7px 11px; border-radius:6px; pointer-events:auto;
+    position:absolute; bottom:10px; left:10px; z-index:6; background:rgba(13,20,16,0.75);
+    border:1px solid var(--line); color:var(--dim); font-family:'IBM Plex Mono',monospace;
+    font-size:0.65rem; letter-spacing:0.05em; text-transform:uppercase; padding:7px 11px; border-radius:6px; pointer-events:auto;
   }
+  .fail-banner{
+    position:absolute; top:42%; left:50%; transform:translate(-50%,-50%) scale(0.6);
+    z-index:8; font-weight:800; font-size:3rem; letter-spacing:0.06em;
+    color:#f2b53c; -webkit-text-stroke:4px #2a5b56;
+    font-family:'Nunito','IBM Plex Mono',sans-serif; opacity:0; pointer-events:none;
+    transition:opacity 0.12s ease, transform 0.18s cubic-bezier(.3,1.6,.5,1);
+  }
+  .fail-banner.show{ opacity:1; transform:translate(-50%,-50%) scale(1); }
   .start-overlay{
     position:absolute; inset:0; z-index:9; background:rgba(8,12,9,0.82);
-    display:flex; flex-direction:column; align-items:center; justify-content:center;
-    text-align:center; padding:30px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:30px;
   }
   .start-overlay .big{ font-size:1.4rem; margin-bottom:14px; }
   .start-overlay .tip{ font-size:0.78rem; color:var(--dim); line-height:1.7; margin-bottom:22px; max-width:280px; }
@@ -112,8 +102,8 @@
   .end-screen .time{ font-size:1rem; color:var(--amber); margin-bottom:24px; }
   .end-row{ display:flex; gap:10px; }
   .end-btn{
-    flex:1; font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:0.78rem; letter-spacing:0.05em;
-    text-transform:uppercase; padding:13px 0; border-radius:10px; cursor:pointer;
+    flex:1; font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:0.78rem;
+    letter-spacing:0.05em; text-transform:uppercase; padding:13px 0; border-radius:10px; cursor:pointer;
   }
   .end-btn.primary{ background:var(--green-dim); border:1px solid var(--green); color:var(--green); }
   .end-btn.ghost{ background:var(--panel-2); border:1px solid var(--line); color:var(--dim); }
@@ -131,28 +121,30 @@
 
     <div id="selectScreen" class="screen">
       <div class="screen-title">Open Trail</div>
-      <div class="screen-sub">Roam an open diorama to the flag. Hold and drag the reins — go anywhere.</div>
+      <div class="screen-sub">Ride the winding trail to the flag — but don't fall off the edge!</div>
       <div id="levelList"></div>
       <div class="control-help">
         <b>Touch &amp; hold</b> anywhere to grab the reins.<br>
         <b>Drag</b> &mdash; the bike heads the <i>opposite</i> way from your drag.<br>
         <b>Drag further</b> &mdash; more speed.<br>
-        <b>Lift your finger</b> &mdash; a little hop over rocks &amp; water.
+        <b>Lift your finger</b> &mdash; hop (carries your momentum).<br>
+        Ride off the green and it's a <b>FAIL</b> &mdash; back to the last checkpoint.
       </div>
     </div>
 
     <div id="gameScreen" class="hidden">
       <div class="game-wrap">
-        <canvas id="gameCanvas" width="380" height="560"></canvas>
+        <canvas id="gameCanvas" width="380" height="600"></canvas>
         <div class="hud">
           <div class="hud-chip" id="timeChip">0.0s</div>
           <div class="hud-chip" id="bestChip"></div>
         </div>
         <div class="touch-layer" id="touchLayer"></div>
         <button class="quit-btn" id="quitBtn">⏏ Quit</button>
+        <div class="fail-banner" id="failBanner">FAIL</div>
         <div class="start-overlay" id="startOverlay">
-          <div class="big" id="overlayTitle">Meadow Loop</div>
-          <div class="tip">Touch and hold to grab the reins. Drag the <b>opposite</b> way you want to go, and further for more speed. Lift your finger for a little hop. Find the flag!</div>
+          <div class="big" id="overlayTitle">Meadow Climb</div>
+          <div class="tip">Touch and hold to grab the reins. Drag the <b>opposite</b> way you want to go, further for more speed. Lift to hop. Stay on the green and reach the flag!</div>
           <button class="go-btn" id="goBtn">Touch to Ride</button>
         </div>
       </div>
@@ -164,7 +156,7 @@
       <div class="time" id="finishTime">0.0s</div>
       <div class="end-row">
         <button class="end-btn ghost" id="endMenuBtn">Menu</button>
-        <button class="end-btn primary" id="endNextBtn">Next Scene</button>
+        <button class="end-btn primary" id="endNextBtn">Next Trail</button>
       </div>
     </div>
 
@@ -174,37 +166,69 @@
 <script>
 (function(){
   /* ======================= CONSTANTS ======================= */
-  const CANVAS_W = 380, CANVAS_H = 560;
-  const V_SCALE   = 0.62;   // vertical compression for the tilted-down look
-  const MAX_DRAG  = 110;    // px for full speed
-  const MAX_SPEED = 260;    // world units / sec
-  const ACCEL     = 7;      // velocity lerp rate
-  const BIKE_R    = 13;
+  const CANVAS_W = 380, CANVAS_H = 600;
+  const V_SCALE   = 0.82;
+  const MAX_DRAG  = 110;
+  const MAX_SPEED = 250;
+  const ACCEL     = 7;
+  const BIKE_R    = 11;
   const HOP_DURATION = 0.42;
+  const PATH_HALF_WIDTH = 95;
+  const EDGE_FALL = 26;
+  const CAM_AHEAD = 150;
 
-  /* ======================= SCENES ======================= */
-  const SCENES = [
+  /* ======================= PALETTE ======================= */
+  const C = {
+    skyTop:'#cdeee4', skyBottom:'#e6f5ee',
+    pathTop:'#2bb89a', pathSide:'#1c7d6a', pathEdge:'#155f51',
+    boulderDark:'#3a2a22', boulderMid:'#5a4436', boulderLight:'#6e5443',
+    treeDark:'#2f7d4a', treeMid:'#3f9657', treeLight:'#57b06d', trunk:'#5a3f28',
+    coneBody:'#e8622f', coneStripe:'#f4e4d0',
+    bikeFrame:'#e8443a', bikeDark:'#1d2b22', skin:'#f0c089',
+    flagPole:'#23332b', flagCloth:'#ff5d5d'
+  };
+
+  /* ======================= TRAILS ======================= */
+  const TRAILS = [
     {
       id:1, name:'Meadow Climb',
-      worldW:620, worldH:2200,
-      start:{x:310,y:2080}, flag:{x:330,y:140},
-      path:[[310,2080],[260,1820],[360,1560],[280,1300],[340,1040],[260,780],[330,520],[290,300],[330,140]],
-      mounds:[{x:200,y:1700,r:70},{x:420,y:900,r:90},{x:250,y:450,r:64}],
-      ponds:[{x:380,y:1450,rx:95,ry:60},{x:250,y:680,rx:80,ry:50}],
-      trees:[{x:160,y:1900},{x:470,y:1750},{x:200,y:1350},{x:450,y:1180},{x:180,y:980},{x:460,y:620},{x:200,y:240},{x:440,y:360}],
-      rocks:[{x:380,y:1980},{x:250,y:1560},{x:430,y:1380},{x:200,y:1100},{x:420,y:760},{x:260,y:540}]
+      centre:[
+        [190,2000],[210,1820],[150,1640],[180,1460],[250,1300],
+        [220,1120],[150,980],[190,820],[260,680],[230,520],[180,380],[210,230]
+      ],
+      scenery:[
+        {type:'cones', t:0.16, n:5},
+        {type:'boulder', t:0.24, lat:-0.1, r:34},
+        {type:'tree', t:0.30, lat:-0.7},
+        {type:'tree', t:0.31, lat:0.7},
+        {type:'cones', t:0.40, n:5},
+        {type:'boulder', t:0.48, lat:0.15, r:30},
+        {type:'tree', t:0.55, lat:-0.6},
+        {type:'cones', t:0.63, n:5},
+        {type:'boulder', t:0.72, lat:-0.2, r:36},
+        {type:'tree', t:0.80, lat:0.6},
+        {type:'cones', t:0.86, n:5}
+      ]
     },
     {
-      id:2, name:'Rocky Ascent',
-      worldW:660, worldH:2500,
-      start:{x:330,y:2380}, flag:{x:340,y:150},
-      path:[[330,2380],[260,2120],[380,1880],[300,1620],[400,1380],[280,1120],[360,860],[300,580],[360,330],[340,150]],
-      mounds:[{x:230,y:1900,r:78},{x:430,y:1000,r:70}],
-      ponds:[{x:360,y:1500,rx:110,ry:62},{x:280,y:720,rx:90,ry:52}],
-      trees:[{x:170,y:2050},{x:480,y:1820},{x:200,y:1250},{x:470,y:1050},{x:180,y:520},{x:470,y:420}],
-      rocks:[
-        {x:380,y:2180},{x:250,y:1980},{x:430,y:1700},{x:280,y:1450},{x:420,y:1280},
-        {x:240,y:1000},{x:440,y:780},{x:300,y:480},{x:400,y:280}
+      id:2, name:'Switchbacks',
+      centre:[
+        [190,2200],[150,2020],[240,1880],[300,1700],[210,1560],[120,1420],
+        [200,1260],[300,1140],[230,980],[140,840],[230,700],[300,560],[220,420],[190,250]
+      ],
+      scenery:[
+        {type:'cones', t:0.12, n:5},
+        {type:'tree', t:0.18, lat:-0.7},
+        {type:'boulder', t:0.22, lat:0.2, r:32},
+        {type:'cones', t:0.30, n:5},
+        {type:'boulder', t:0.37, lat:-0.15, r:36},
+        {type:'tree', t:0.44, lat:0.7},
+        {type:'cones', t:0.50, n:5},
+        {type:'boulder', t:0.58, lat:0.1, r:30},
+        {type:'tree', t:0.64, lat:-0.6},
+        {type:'cones', t:0.72, n:5},
+        {type:'boulder', t:0.80, lat:-0.2, r:34},
+        {type:'cones', t:0.88, n:5}
       ]
     }
   ];
@@ -220,6 +244,7 @@
     touchLayer: document.getElementById('touchLayer'),
     timeChip: document.getElementById('timeChip'),
     bestChip: document.getElementById('bestChip'),
+    failBanner: document.getElementById('failBanner'),
     startOverlay: document.getElementById('startOverlay'),
     overlayTitle: document.getElementById('overlayTitle'),
     goBtn: document.getElementById('goBtn'),
@@ -230,7 +255,7 @@
   };
   const ctx = els.canvas.getContext('2d');
 
-  const PROGRESS_KEY = 'opentrail_progress_v1';
+  const PROGRESS_KEY = 'opentrail_v2_progress';
   function loadProgress(){
     try { return JSON.parse(localStorage.getItem(PROGRESS_KEY)) || {unlocked:1, best:{}}; }
     catch(e){ return {unlocked:1, best:{}}; }
@@ -238,58 +263,126 @@
   function saveProgress(p){ try{ localStorage.setItem(PROGRESS_KEY, JSON.stringify(p)); }catch(e){} }
   let progress = loadProgress();
 
-  let scene = null;
+  let trail = null;
   let running = false, started = false;
   let elapsed = 0;
   let rafId = null;
+  let failing = false;
+  let checkpointIdx = 0;
 
-  const bike = { x:0, y:0, vx:0, vy:0, hopTimer:0, hopping:false, hopVX:0, hopVY:0, angle:0 };
-  let bikeFacing = 1;   // 1 = facing right, -1 = facing left
-  let wheelSpin = 0;
-  const cam = { x:0, y:0 };
+  const bike = { x:0, y:0, vx:0, vy:0, hopTimer:0, hopping:false, hopVX:0, hopVY:0 };
+  let bikeFacing = 1, wheelSpin = 0;
+  const cam = { x:0, y:0, angle:0 };
+  let dust = [];
   const touch = { active:false, anchorX:0, anchorY:0, curX:0, curY:0 };
+
+  /* ======================= PATH MATHS ======================= */
+  function sampleCentre(pts, u){
+    const n = pts.length;
+    const i = Math.max(0, Math.min(n-2, Math.floor(u)));
+    const t = u - i;
+    const p0 = pts[Math.max(0,i-1)], p1 = pts[i], p2 = pts[i+1], p3 = pts[Math.min(n-1,i+2)];
+    const t2=t*t, t3=t2*t;
+    const x = 0.5*((2*p1[0]) + (-p0[0]+p2[0])*t + (2*p0[0]-5*p1[0]+4*p2[0]-p3[0])*t2 + (-p0[0]+3*p1[0]-3*p2[0]+p3[0])*t3);
+    const y = 0.5*((2*p1[1]) + (-p0[1]+p2[1])*t + (2*p0[1]-5*p1[1]+4*p2[1]-p3[1])*t2 + (-p0[1]+3*p1[1]-3*p2[1]+p3[1])*t3);
+    return {x,y};
+  }
+  function tangentAt(pts, u){
+    const a = sampleCentre(pts, Math.max(0, u-0.01));
+    const b = sampleCentre(pts, Math.min(pts.length-1, u+0.01));
+    const dx=b.x-a.x, dy=b.y-a.y; const len=Math.hypot(dx,dy)||1;
+    return {x:dx/len, y:dy/len};
+  }
+
+  function buildTrail(def){
+    const pts = def.centre, N = pts.length;
+    const samples = [];
+    const STEP = 0.06;
+    for (let u=0; u<=N-1+0.0001; u+=STEP){
+      const c = sampleCentre(pts, u);
+      const tg = tangentAt(pts, u);
+      const nx = -tg.y, ny = tg.x;
+      samples.push({ u, cx:c.x, cy:c.y, nx, ny,
+        lx:c.x+nx*PATH_HALF_WIDTH, ly:c.y+ny*PATH_HALF_WIDTH,
+        rx:c.x-nx*PATH_HALF_WIDTH, ry:c.y-ny*PATH_HALF_WIDTH });
+    }
+    const start = sampleCentre(pts, 0);
+    const flag  = sampleCentre(pts, N-1);
+    const scenery = def.scenery.map(sc=>{
+      const u = sc.t*(N-1);
+      const c = sampleCentre(pts, u);
+      const tg = tangentAt(pts, u);
+      const nx=-tg.y, ny=tg.x;
+      if (sc.type==='cones'){
+        const cones=[]; const count=sc.n||5;
+        for (let k=0;k<count;k++){
+          const f=(k/(count-1))*2-1;
+          cones.push({ x:c.x+nx*f*PATH_HALF_WIDTH*0.82, y:c.y+ny*f*PATH_HALF_WIDTH*0.82 });
+        }
+        return {type:'cones', cones, y:c.y};
+      } else {
+        const lat=sc.lat||0;
+        return { type:sc.type, x:c.x+nx*lat*PATH_HALF_WIDTH*0.7, y:c.y+ny*lat*PATH_HALF_WIDTH*0.7, r:sc.r||30 };
+      }
+    });
+    return { samples, scenery, start, flag, name:def.name, id:def.id, centre:pts, N };
+  }
+
+  function nearestOnPath(wx, wy){
+    let best=null, bestD=Infinity, bestI=0;
+    for (let i=0;i<trail.samples.length;i++){
+      const s=trail.samples[i];
+      const d=(s.cx-wx)*(s.cx-wx)+(s.cy-wy)*(s.cy-wy);
+      if (d<bestD){ bestD=d; best=s; bestI=i; }
+    }
+    const dx=wx-best.cx, dy=wy-best.cy;
+    const lateral = dx*best.nx + dy*best.ny;
+    return { lateral, sample:best, idx:bestI };
+  }
 
   /* ======================= LEVEL SELECT UI ======================= */
   function renderLevelList(){
     els.levelList.innerHTML = '';
-    SCENES.forEach(sc=>{
-      const unlocked = sc.id <= progress.unlocked;
+    TRAILS.forEach(tr=>{
+      const unlocked = tr.id <= progress.unlocked;
       const card = document.createElement('div');
       card.className = 'level-card' + (unlocked ? '' : ' locked');
-      const best = progress.best[sc.id];
+      const best = progress.best[tr.id];
       card.innerHTML = `
-        <div class="num">${unlocked ? sc.id : '🔒'}</div>
+        <div class="num">${unlocked ? tr.id : '🔒'}</div>
         <div class="meta">
-          <div class="name">${sc.name}</div>
-          <div class="theme">open diorama</div>
+          <div class="name">${tr.name}</div>
+          <div class="theme">winding trail</div>
           ${best ? `<div class="best">Best: ${best.toFixed(1)}s</div>` : ''}
         </div>
         <div class="arrow">▶</div>
       `;
-      if (unlocked) card.addEventListener('click', ()=> startScene(sc.id));
+      if (unlocked) card.addEventListener('click', ()=> startTrail(tr.id));
       els.levelList.appendChild(card);
     });
   }
   renderLevelList();
 
   /* ======================= LIFECYCLE ======================= */
-  function startScene(id){
-    scene = SCENES.find(s=>s.id===id);
-    bike.x = scene.start.x; bike.y = scene.start.y;
-    bike.vx = 0; bike.vy = 0; bike.hopping = false; bike.hopTimer = 0; bike.hopVX = 0; bike.hopVY = 0; bike.angle = 0;
-    bikeFacing = 1; wheelSpin = 0;
+  function startTrail(id){
+    const def = TRAILS.find(t=>t.id===id);
+    trail = buildTrail(def);
+    bike.x = trail.start.x; bike.y = trail.start.y;
+    bike.vx=0; bike.vy=0; bike.hopping=false; bike.hopTimer=0; bike.hopVX=0; bike.hopVY=0;
+    bikeFacing=1; wheelSpin=0; dust=[]; checkpointIdx=0; failing=false;
+    const tg = tangentAt(trail.centre, 0);
+    cam.angle = Math.atan2(tg.y, tg.x) + Math.PI/2;
     cam.x = bike.x; cam.y = bike.y;
-    elapsed = 0;
-    started = false;
-    touch.active = false;
+    elapsed = 0; started = false;
 
-    els.overlayTitle.textContent = scene.name;
+    els.overlayTitle.textContent = trail.name;
     els.startOverlay.classList.remove('hidden');
+    els.failBanner.classList.remove('show');
     els.selectScreen.classList.add('hidden');
     els.endScreen.classList.add('hidden');
     els.gameScreen.classList.remove('hidden');
-    els.statusRight.textContent = scene.name.toUpperCase();
-    const best = progress.best[scene.id];
+    els.statusRight.textContent = trail.name.toUpperCase();
+    const best = progress.best[trail.id];
     els.bestChip.textContent = best ? ('best ' + best.toFixed(1) + 's') : '';
 
     running = true;
@@ -297,416 +390,333 @@
   }
 
   function quitToMenu(){
-    running = false; started = false;
-    if (rafId){ cancelAnimationFrame(rafId); rafId = null; }
+    running=false; started=false;
+    if (rafId){ cancelAnimationFrame(rafId); rafId=null; }
     els.gameScreen.classList.add('hidden');
     els.endScreen.classList.add('hidden');
     els.selectScreen.classList.remove('hidden');
     renderLevelList();
-    els.statusRight.textContent = '';
+    els.statusRight.textContent='';
   }
 
-  function completeScene(){
-    running = false;
+  function completeTrail(){
+    running=false;
     const t = elapsed;
-    if (!progress.best[scene.id] || t < progress.best[scene.id]) progress.best[scene.id] = t;
-    if (progress.unlocked === scene.id && scene.id < SCENES.length) progress.unlocked = scene.id + 1;
+    if (!progress.best[trail.id] || t < progress.best[trail.id]) progress.best[trail.id]=t;
+    if (progress.unlocked===trail.id && trail.id<TRAILS.length) progress.unlocked=trail.id+1;
     saveProgress(progress);
-
-    els.finishTime.textContent = t.toFixed(1) + 's';
-    const hasNext = scene.id < SCENES.length;
-    els.endNextBtn.classList.toggle('hidden', !hasNext);
+    els.finishTime.textContent = t.toFixed(1)+'s';
+    els.endNextBtn.classList.toggle('hidden', trail.id>=TRAILS.length);
     els.gameScreen.classList.add('hidden');
     els.endScreen.classList.remove('hidden');
+  }
+
+  function triggerFail(){
+    if (failing) return;
+    failing = true;
+    touch.active = false;
+    els.failBanner.classList.add('show');
+    setTimeout(()=>{
+      els.failBanner.classList.remove('show');
+      const s = trail.samples[checkpointIdx];
+      bike.x = s.cx; bike.y = s.cy;
+      bike.vx=0; bike.vy=0; bike.hopping=false; bike.hopTimer=0;
+      const tg = tangentAt(trail.centre, s.u);
+      cam.angle = Math.atan2(tg.y, tg.x) + Math.PI/2;
+      cam.x = bike.x; cam.y = bike.y;
+      failing = false;
+    }, 700);
   }
 
   /* ======================= INPUT ======================= */
   function pointFromEvent(e){
     const rect = els.touchLayer.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    return { x:e.clientX-rect.left, y:e.clientY-rect.top };
   }
   function pointerDown(e){
-    if (!started){ started = true; els.startOverlay.classList.add('hidden'); }
-    touch.active = true;
-    const p = pointFromEvent(e);
-    touch.anchorX = p.x; touch.anchorY = p.y;
-    touch.curX = p.x; touch.curY = p.y;
-    try { els.touchLayer.setPointerCapture(e.pointerId); } catch(err){}
+    if (!started){ started=true; els.startOverlay.classList.add('hidden'); }
+    if (failing) return;
+    touch.active=true;
+    const p=pointFromEvent(e);
+    touch.anchorX=p.x; touch.anchorY=p.y; touch.curX=p.x; touch.curY=p.y;
+    try{ els.touchLayer.setPointerCapture(e.pointerId); }catch(err){}
   }
   function pointerMove(e){
     if (!touch.active) return;
-    const p = pointFromEvent(e);
-    touch.curX = p.x; touch.curY = p.y;
+    const p=pointFromEvent(e);
+    touch.curX=p.x; touch.curY=p.y;
   }
   function pointerUp(e){
     if (!touch.active) return;
-    touch.active = false;
-    if (!bike.hopping){
-      bike.hopping = true;
-      bike.hopTimer = 0;
-      // launch in the direction of current momentum, with a little forward boost
-      bike.hopVX = bike.vx * 1.15;
-      bike.hopVY = bike.vy * 1.15;
+    touch.active=false;
+    if (!bike.hopping && !failing){
+      bike.hopping=true; bike.hopTimer=0;
+      bike.hopVX=bike.vx*1.15; bike.hopVY=bike.vy*1.15;
     }
   }
   els.touchLayer.addEventListener('pointerdown', pointerDown);
   els.touchLayer.addEventListener('pointermove', pointerMove);
   els.touchLayer.addEventListener('pointerup', pointerUp);
   els.touchLayer.addEventListener('pointercancel', pointerUp);
-  els.goBtn.addEventListener('click', ()=>{ started = true; els.startOverlay.classList.add('hidden'); });
+  els.goBtn.addEventListener('click', ()=>{ started=true; els.startOverlay.classList.add('hidden'); });
   els.quitBtn.addEventListener('click', quitToMenu);
   els.endMenuBtn.addEventListener('click', quitToMenu);
-  els.endNextBtn.addEventListener('click', ()=>{ if (scene.id < SCENES.length) startScene(scene.id + 1); });
+  els.endNextBtn.addEventListener('click', ()=>{ if (trail.id<TRAILS.length) startTrail(trail.id+1); });
 
-  /* ======================= COLLISION HELPERS ======================= */
-  function resolveCircle(obj, r){
-    const dx = bike.x - obj.x, dy = bike.y - obj.y;
-    const dist = Math.hypot(dx,dy);
-    const minDist = r + BIKE_R;
-    if (dist < minDist && dist > 0.001){
-      const nx = dx/dist, ny = dy/dist;
-      const push = (minDist - dist);
-      bike.x += nx * push;
-      bike.y += ny * push;
-      // kill the velocity component driving into the obstacle so the bike slides, not jitters
-      const vDotN = bike.vx*nx + bike.vy*ny;
-      if (vDotN < 0){
-        bike.vx -= vDotN * nx;
-        bike.vy -= vDotN * ny;
-      }
+  // drag (screen space) -> world space using camera angle
+  function dragToWorld(dx, dy){
+    const ca = Math.cos(cam.angle), sa = Math.sin(cam.angle);
+    return { wx: ca*dx + sa*dy, wy: -sa*dx + ca*dy };
+  }
+
+  /* ======================= COLLISION ======================= */
+  function resolveCircle(ox, oy, r){
+    const dx=bike.x-ox, dy=bike.y-oy, dist=Math.hypot(dx,dy), minD=r+BIKE_R;
+    if (dist<minD && dist>0.001){
+      const nx=dx/dist, ny=dy/dist, push=minD-dist;
+      bike.x+=nx*push; bike.y+=ny*push;
+      const vN=bike.vx*nx+bike.vy*ny;
+      if (vN<0){ bike.vx-=vN*nx; bike.vy-=vN*ny; }
     }
+  }
+
+  function lerpAngle(a, b, t){
+    let d = b-a;
+    while (d>Math.PI) d-=2*Math.PI;
+    while (d<-Math.PI) d+=2*Math.PI;
+    return a + d*t;
   }
 
   /* ======================= PHYSICS ======================= */
   function update(dt){
     if (!running || !started) return;
+    if (failing){ return; }
     elapsed += dt;
 
-    let targetVX = 0, targetVY = 0;
+    let targetVX=0, targetVY=0;
     if (bike.hopping){
-      // airborne: ignore steering, coast on the velocity latched at takeoff
-      bike.vx = bike.hopVX;
-      bike.vy = bike.hopVY;
+      bike.vx=bike.hopVX; bike.vy=bike.hopVY;
     } else if (touch.active){
-      const dx = touch.curX - touch.anchorX;
-      const dy = touch.curY - touch.anchorY;
-      const dragDist = Math.hypot(dx,dy);
-      const speedFrac = Math.max(0, Math.min(1, dragDist / MAX_DRAG));
-      if (dragDist > 4){
-        const dirX = -dx / dragDist;
-        const dirY = -dy / dragDist;
-        targetVX = dirX * speedFrac * MAX_SPEED;
-        targetVY = (dirY * speedFrac * MAX_SPEED) / V_SCALE;
-        bike.angle = Math.atan2(dirY, dirX);
+      const dx=touch.curX-touch.anchorX, dy=touch.curY-touch.anchorY;
+      const dragDist=Math.hypot(dx,dy);
+      const speedFrac=Math.max(0,Math.min(1,dragDist/MAX_DRAG));
+      if (dragDist>4){
+        const w = dragToWorld(-dx, -dy);
+        const wl = Math.hypot(w.wx,w.wy)||1;
+        targetVX = (w.wx/wl)*speedFrac*MAX_SPEED;
+        targetVY = (w.wy/wl)*speedFrac*MAX_SPEED;
       }
     }
-
     if (!bike.hopping){
-      bike.vx += (targetVX - bike.vx) * Math.min(1, ACCEL*dt);
-      bike.vy += (targetVY - bike.vy) * Math.min(1, ACCEL*dt);
+      bike.vx += (targetVX-bike.vx)*Math.min(1,ACCEL*dt);
+      bike.vy += (targetVY-bike.vy)*Math.min(1,ACCEL*dt);
     }
 
-    bike.x += bike.vx * dt;
-    bike.y += bike.vy * dt;
-    bike.x = Math.max(20, Math.min(scene.worldW-20, bike.x));
-    bike.y = Math.max(20, Math.min(scene.worldH-20, bike.y));
+    bike.x += bike.vx*dt;
+    bike.y += bike.vy*dt;
+
+    if (bike.vx>8) bikeFacing=1; else if (bike.vx<-8) bikeFacing=-1;
+    const speed=Math.hypot(bike.vx,bike.vy);
+    wheelSpin += (speed/MAX_SPEED)*0.5*bikeFacing;
+
+    if (speed>40 && !bike.hopping && Math.random()<0.6){
+      dust.push({x:bike.x, y:bike.y, life:0.5, r:2+Math.random()*2});
+    }
+    dust.forEach(d=> d.life-=dt);
+    dust = dust.filter(d=>d.life>0);
 
     if (bike.hopping){
-      bike.hopTimer += dt;
-      if (bike.hopTimer >= HOP_DURATION) bike.hopping = false;
+      bike.hopTimer+=dt;
+      if (bike.hopTimer>=HOP_DURATION) bike.hopping=false;
     } else {
-      // soft collision only when not hopping (a hop lets you skim over small obstacles)
-      scene.trees.forEach(t=> resolveCircle(t, 22));
-      scene.rocks.forEach(r=> resolveCircle(r, 20));
+      trail.scenery.forEach(sc=>{
+        if (sc.type==='boulder') resolveCircle(sc.x, sc.y, sc.r);
+        else if (sc.type==='tree') resolveCircle(sc.x, sc.y, 16);
+        else if (sc.type==='cones'){ sc.cones.forEach(c=> resolveCircle(c.x, c.y, 8)); }
+      });
     }
 
-    // ponds gently slow you down, never block
-    let inPond = false;
-    scene.ponds.forEach(p=>{
-      const dx=(bike.x-p.x)/p.rx, dy=(bike.y-p.y)/p.ry;
-      if (dx*dx+dy*dy < 1) inPond = true;
-    });
-    if (inPond && !bike.hopping){
-      bike.vx *= 0.93; bike.vy *= 0.93;
+    const near = nearestOnPath(bike.x, bike.y);
+    if (near.idx > checkpointIdx) checkpointIdx = near.idx;
+    if (!bike.hopping && Math.abs(near.lateral) > PATH_HALF_WIDTH + EDGE_FALL){
+      triggerFail();
     }
 
-    cam.x += (bike.x - cam.x) * Math.min(1, 10*dt);
-    cam.y += (bike.y - cam.y) * Math.min(1, 10*dt);
+    const tg = tangentAt(trail.centre, near.sample.u);
+    const targetAngle = Math.atan2(tg.y, tg.x) + Math.PI/2;
+    cam.angle = lerpAngle(cam.angle, targetAngle, Math.min(1, 3*dt));
+    cam.x += (bike.x-cam.x)*Math.min(1,10*dt);
+    cam.y += (bike.y-cam.y)*Math.min(1,10*dt);
 
-    const dFlag = Math.hypot(bike.x-scene.flag.x, bike.y-scene.flag.y);
-    if (dFlag < 34){ completeScene(); return; }
+    const dFlag=Math.hypot(bike.x-trail.flag.x, bike.y-trail.flag.y);
+    if (dFlag<34){ completeTrail(); return; }
 
-    els.timeChip.textContent = elapsed.toFixed(1) + 's';
+    els.timeChip.textContent = elapsed.toFixed(1)+'s';
   }
 
   /* ======================= RENDER ======================= */
+  const SCREEN_CX = CANVAS_W/2;
+  const SCREEN_CY = CANVAS_H - CAM_AHEAD;
   function toScreen(wx, wy){
-    return {
-      x: CANVAS_W/2 + (wx - cam.x),
-      y: CANVAS_H/2 + (wy - cam.y) * V_SCALE
-    };
+    const dx=wx-cam.x, dy=wy-cam.y;
+    const ca=Math.cos(-cam.angle), sa=Math.sin(-cam.angle);
+    const rx = ca*dx - sa*dy;
+    const ry = (sa*dx + ca*dy);
+    return { x:SCREEN_CX + rx, y:SCREEN_CY + ry*V_SCALE };
   }
 
-  function drawGround(){
-    const grad = ctx.createLinearGradient(0,0,0,CANVAS_H);
-    grad.addColorStop(0, '#bfe6a8');
-    grad.addColorStop(1, '#9ad17e');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
+  function drawSky(){
+    const g=ctx.createLinearGradient(0,0,0,CANVAS_H);
+    g.addColorStop(0,C.skyTop); g.addColorStop(1,C.skyBottom);
+    ctx.fillStyle=g; ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
   }
 
-  function drawPath(){
-    if (!scene.path || scene.path.length < 2) return;
-    ctx.strokeStyle = 'rgba(196,166,110,0.55)';
-    ctx.lineWidth = 16;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    scene.path.forEach((pt,i)=>{
-      const s = toScreen(pt[0], pt[1]);
-      if (i===0) ctx.moveTo(s.x,s.y); else ctx.lineTo(s.x,s.y);
-    });
-    ctx.stroke();
-  }
+  function drawRibbon(){
+    const S = trail.samples;
+    const topPts = S.map(s=>({ l:toScreen(s.lx,s.ly), r:toScreen(s.rx,s.ry) }));
+    const SLAB = 10;
 
-  function drawMound(m){
-    const s = toScreen(m.x, m.y);
-    const rx = m.r, ry = m.r * V_SCALE * 0.9;
-    const grad = ctx.createRadialGradient(s.x-rx*0.2, s.y-ry*0.3, ry*0.2, s.x, s.y, rx);
-    grad.addColorStop(0, '#bfe8a0');
-    grad.addColorStop(1, '#88bb66');
-    ctx.fillStyle = grad;
+    // edge slab underside
+    ctx.fillStyle = C.pathEdge;
     ctx.beginPath();
-    ctx.ellipse(s.x, s.y, rx, ry, 0, 0, Math.PI*2);
-    ctx.fill();
-  }
+    topPts.forEach((p,i)=>{ if(i===0)ctx.moveTo(p.l.x,p.l.y+SLAB); else ctx.lineTo(p.l.x,p.l.y+SLAB); });
+    for (let i=topPts.length-1;i>=0;i--){ ctx.lineTo(topPts[i].r.x, topPts[i].r.y+SLAB); }
+    ctx.closePath(); ctx.fill();
 
-  function drawPond(p){
-    const s = toScreen(p.x, p.y);
-    const ry = p.ry * V_SCALE;
-    ctx.fillStyle = '#6fb8d8';
+    // side strips
+    ctx.fillStyle = C.pathSide;
+    for (let i=0;i<topPts.length-1;i++){
+      const a=topPts[i], b=topPts[i+1];
+      ctx.beginPath();
+      ctx.moveTo(a.l.x,a.l.y); ctx.lineTo(b.l.x,b.l.y); ctx.lineTo(b.l.x,b.l.y+SLAB); ctx.lineTo(a.l.x,a.l.y+SLAB);
+      ctx.closePath(); ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(a.r.x,a.r.y); ctx.lineTo(b.r.x,b.r.y); ctx.lineTo(b.r.x,b.r.y+SLAB); ctx.lineTo(a.r.x,a.r.y+SLAB);
+      ctx.closePath(); ctx.fill();
+    }
+
+    // top surface
+    ctx.fillStyle = C.pathTop;
     ctx.beginPath();
-    ctx.ellipse(s.x, s.y, p.rx, ry, 0, 0, Math.PI*2);
-    ctx.fill();
-    ctx.strokeStyle = '#4f93b0';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.ellipse(s.x, s.y, p.rx*0.55, ry*0.45, 0, 0.3, 2.6);
-    ctx.stroke();
+    topPts.forEach((p,i)=>{ if(i===0)ctx.moveTo(p.l.x,p.l.y); else ctx.lineTo(p.l.x,p.l.y); });
+    for (let i=topPts.length-1;i>=0;i--){ ctx.lineTo(topPts[i].r.x, topPts[i].r.y); }
+    ctx.closePath(); ctx.fill();
   }
 
   function drawShadow(s, rx, ry){
-    ctx.fillStyle = 'rgba(0,0,0,0.22)';
-    ctx.beginPath();
-    ctx.ellipse(s.x, s.y, rx, ry, 0, 0, Math.PI*2);
-    ctx.fill();
+    ctx.fillStyle='rgba(0,0,0,0.18)';
+    ctx.beginPath(); ctx.ellipse(s.x,s.y,rx,ry,0,0,Math.PI*2); ctx.fill();
   }
 
-  function drawTree(t){
-    const s = toScreen(t.x, t.y);
-    drawShadow(s, 16, 7);
-    ctx.fillStyle = '#7a5230';
-    ctx.fillRect(s.x-3, s.y-22, 6, 22);
-    ctx.fillStyle = '#3c7a3f';
-    ctx.beginPath();
-    ctx.ellipse(s.x, s.y-34, 20, 18, 0, 0, Math.PI*2);
-    ctx.fill();
-    ctx.fillStyle = '#4f9650';
-    ctx.beginPath();
-    ctx.ellipse(s.x-6, s.y-40, 13, 11, 0, 0, Math.PI*2);
-    ctx.fill();
+  function drawBoulder(o){
+    const s=toScreen(o.x,o.y);
+    drawShadow({x:s.x,y:s.y+4}, o.r*0.9, o.r*0.4);
+    const lobes=[[-o.r*0.5,0,o.r*0.62],[o.r*0.5,0,o.r*0.6],[0,-o.r*0.2,o.r*0.78]];
+    lobes.forEach((lb,i)=>{
+      const g=ctx.createRadialGradient(s.x+lb[0]-lb[2]*0.3, s.y+lb[1]-lb[2]*0.4, lb[2]*0.2, s.x+lb[0], s.y+lb[1], lb[2]);
+      g.addColorStop(0, i===2?C.boulderLight:C.boulderMid);
+      g.addColorStop(1, C.boulderDark);
+      ctx.fillStyle=g;
+      ctx.beginPath(); ctx.ellipse(s.x+lb[0], s.y+lb[1], lb[2], lb[2]*0.92, 0,0,Math.PI*2); ctx.fill();
+    });
   }
 
-  function drawRock(r){
-    const s = toScreen(r.x, r.y);
-    drawShadow(s, 14, 6);
-    ctx.fillStyle = '#9a9a92';
+  function drawTree(o){
+    const s=toScreen(o.x,o.y);
+    drawShadow({x:s.x,y:s.y+2}, 15, 6);
+    ctx.fillStyle=C.trunk; ctx.fillRect(s.x-3,s.y-10,6,12);
+    const tiers=[[0,-8,22,14,C.treeDark],[0,-20,18,12,C.treeMid],[0,-30,13,9,C.treeLight]];
+    tiers.forEach(t=>{
+      ctx.fillStyle=t[4];
+      ctx.beginPath(); ctx.ellipse(s.x+t[0], s.y+t[1], t[2], t[3], 0,0,Math.PI*2); ctx.fill();
+    });
+  }
+
+  function drawCone(c){
+    const s=toScreen(c.x,c.y);
+    ctx.fillStyle=C.coneBody;
     ctx.beginPath();
-    ctx.moveTo(s.x-14, s.y);
-    ctx.lineTo(s.x-9, s.y-14);
-    ctx.lineTo(s.x+6, s.y-17);
-    ctx.lineTo(s.x+15, s.y-4);
-    ctx.lineTo(s.x+10, s.y+6);
-    ctx.lineTo(s.x-8, s.y+7);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#b7b7ae';
-    ctx.beginPath();
-    ctx.moveTo(s.x-9, s.y-14);
-    ctx.lineTo(s.x+6, s.y-17);
-    ctx.lineTo(s.x, s.y-9);
-    ctx.closePath();
-    ctx.fill();
+    ctx.moveTo(s.x, s.y-13); ctx.lineTo(s.x+6, s.y+3); ctx.lineTo(s.x-6, s.y+3);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle=C.coneStripe;
+    ctx.fillRect(s.x-4.2, s.y-5, 8.4, 3);
   }
 
   function drawFlag(){
-    const s = toScreen(scene.flag.x, scene.flag.y);
-    drawShadow(s, 12, 5);
-    ctx.strokeStyle = '#2a2a2a';
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(s.x, s.y); ctx.lineTo(s.x, s.y-58);
-    ctx.stroke();
-    ctx.fillStyle = '#ff5d5d';
-    ctx.beginPath();
-    ctx.moveTo(s.x, s.y-58);
-    ctx.lineTo(s.x+26, s.y-49);
-    ctx.lineTo(s.x, s.y-40);
-    ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#2a2a2a';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    const s=toScreen(trail.flag.x, trail.flag.y);
+    drawShadow({x:s.x,y:s.y+3}, 12, 5);
+    ctx.strokeStyle=C.flagPole; ctx.lineWidth=4;
+    ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(s.x,s.y-58); ctx.stroke();
+    ctx.fillStyle=C.flagCloth;
+    ctx.beginPath(); ctx.moveTo(s.x,s.y-58); ctx.lineTo(s.x+26,s.y-49); ctx.lineTo(s.x,s.y-40); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle=C.flagPole; ctx.lineWidth=2; ctx.stroke();
   }
 
   function drawBicycleShape(){
-    // drawn centred at origin, facing right; caller handles flip/rotation/lift
-    const W = '#1d2b22';     // outline / wheels
-    const FRAME = '#ff5d3a'; // frame colour
-    const SKIN = '#f0c089';
-    const SHIRT = '#3a78c8';
-
-    // wheels
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = W;
-    ctx.fillStyle = 'rgba(255,255,255,0.15)';
-    [-13, 13].forEach(wx=>{
-      ctx.beginPath();
-      ctx.arc(wx, 6, 9, 0, Math.PI*2);
-      ctx.fill();
-      ctx.stroke();
-    });
-    // spokes (spin with travel)
-    ctx.lineWidth = 1.4;
-    ctx.strokeStyle = 'rgba(29,43,34,0.7)';
-    [-13, 13].forEach(wx=>{
-      for (let k=0;k<4;k++){
-        const a = wheelSpin + k*(Math.PI/4);
-        ctx.beginPath();
-        ctx.moveTo(wx, 6);
-        ctx.lineTo(wx + Math.cos(a)*8, 6 + Math.sin(a)*8);
-        ctx.stroke();
-      }
-    });
-
-    // frame: rear wheel -> crank -> seat -> head, plus down tube
-    ctx.lineWidth = 3.4;
-    ctx.strokeStyle = FRAME;
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
+    const W=C.bikeDark, FRAME=C.bikeFrame, SKIN=C.skin, SHIRT='#3a78c8';
+    ctx.lineWidth=3; ctx.strokeStyle=W; ctx.fillStyle='rgba(255,255,255,0.15)';
+    [-13,13].forEach(wx=>{ ctx.beginPath(); ctx.arc(wx,6,9,0,Math.PI*2); ctx.fill(); ctx.stroke(); });
+    ctx.lineWidth=1.4; ctx.strokeStyle='rgba(29,43,34,0.7)';
+    [-13,13].forEach(wx=>{ for(let k=0;k<4;k++){ const a=wheelSpin+k*(Math.PI/4); ctx.beginPath(); ctx.moveTo(wx,6); ctx.lineTo(wx+Math.cos(a)*8,6+Math.sin(a)*8); ctx.stroke(); } });
+    ctx.lineWidth=3.4; ctx.strokeStyle=FRAME; ctx.lineJoin='round'; ctx.lineCap='round';
     ctx.beginPath();
-    ctx.moveTo(-13, 6);   // rear hub
-    ctx.lineTo(0, 6);     // crank/bottom bracket
-    ctx.lineTo(-4, -6);   // up to seat
-    ctx.lineTo(-13, 6);   // seat stay back to rear hub
-    ctx.moveTo(0, 6);     // crank
-    ctx.lineTo(9, -7);    // down tube up to head tube
-    ctx.lineTo(-4, -6);   // top tube to seat
-    ctx.moveTo(9, -7);    // head tube
-    ctx.lineTo(13, 6);    // fork to front hub
+    ctx.moveTo(-13,6); ctx.lineTo(0,6); ctx.lineTo(-4,-6); ctx.lineTo(-13,6);
+    ctx.moveTo(0,6); ctx.lineTo(9,-7); ctx.lineTo(-4,-6);
+    ctx.moveTo(9,-7); ctx.lineTo(13,6);
     ctx.stroke();
-
-    // handlebars
-    ctx.beginPath();
-    ctx.moveTo(9, -7);
-    ctx.lineTo(14, -11);
-    ctx.stroke();
-
-    // seat
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = W;
-    ctx.beginPath();
-    ctx.moveTo(-7, -7);
-    ctx.lineTo(-1, -7);
-    ctx.stroke();
-
-    // little rider
-    ctx.fillStyle = SHIRT;          // torso
-    ctx.beginPath();
-    ctx.moveTo(-4, -7);
-    ctx.lineTo(9, -9);
-    ctx.lineTo(7, -16);
-    ctx.lineTo(-2, -13);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = SKIN;           // head
-    ctx.beginPath();
-    ctx.arc(8, -19, 4.2, 0, Math.PI*2);
-    ctx.fill();
-    ctx.fillStyle = W;              // helmet cap
-    ctx.beginPath();
-    ctx.arc(8, -19, 4.2, Math.PI, Math.PI*2);
-    ctx.fill();
-    // arm to bars
-    ctx.strokeStyle = SHIRT;
-    ctx.lineWidth = 2.6;
-    ctx.beginPath();
-    ctx.moveTo(4, -12);
-    ctx.lineTo(13, -10);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(9,-7); ctx.lineTo(14,-11); ctx.stroke();
+    ctx.lineWidth=3; ctx.strokeStyle=W; ctx.beginPath(); ctx.moveTo(-7,-7); ctx.lineTo(-1,-7); ctx.stroke();
+    ctx.fillStyle=SHIRT; ctx.beginPath(); ctx.moveTo(-4,-7); ctx.lineTo(9,-9); ctx.lineTo(7,-16); ctx.lineTo(-2,-13); ctx.closePath(); ctx.fill();
+    ctx.fillStyle=SKIN; ctx.beginPath(); ctx.arc(8,-19,4.2,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=W; ctx.beginPath(); ctx.arc(8,-19,4.2,Math.PI,Math.PI*2); ctx.fill();
+    ctx.strokeStyle=SHIRT; ctx.lineWidth=2.6; ctx.beginPath(); ctx.moveTo(4,-12); ctx.lineTo(13,-10); ctx.stroke();
   }
 
   function drawBike(){
-    const s = toScreen(bike.x, bike.y);
+    const s=toScreen(bike.x,bike.y);
     const hopFrac = bike.hopping ? Math.sin(Math.min(1,bike.hopTimer/HOP_DURATION)*Math.PI) : 0;
-    const lift = hopFrac * 30;
-    const shadowScale = 1 - hopFrac*0.55;
-
-    // update facing from horizontal travel (ignore tiny drift)
-    if (bike.vx > 8) bikeFacing = 1;
-    else if (bike.vx < -8) bikeFacing = -1;
-
-    // spin wheels in proportion to speed
-    const speed = Math.hypot(bike.vx, bike.vy);
-    wheelSpin += (speed/MAX_SPEED) * 0.5 * bikeFacing;
-
-    drawShadow(s, 15*shadowScale, 7*shadowScale);
-
+    const lift=hopFrac*30, shadowScale=1-hopFrac*0.55;
+    drawShadow({x:s.x,y:s.y}, 15*shadowScale, 7*shadowScale);
     ctx.save();
-    ctx.translate(s.x, s.y - 8 - lift);
-    ctx.scale(bikeFacing, 1);
-
-    if (bike.hopping){
-      // comedic tumble in the air, in travel direction
-      const t = Math.min(1, bike.hopTimer/HOP_DURATION);
-      ctx.rotate(t * Math.PI * 1.4 * 1);
-    } else {
-      const lean = Math.max(-0.25, Math.min(0.25, (speed/MAX_SPEED)*0.2));
-      ctx.rotate(-lean);
-    }
-
+    ctx.translate(s.x, s.y-8-lift);
+    ctx.scale(bikeFacing,1);
+    if (bike.hopping){ ctx.rotate(Math.min(1,bike.hopTimer/HOP_DURATION)*Math.PI*1.4); }
+    else { const sp=Math.hypot(bike.vx,bike.vy); ctx.rotate(-Math.max(-0.25,Math.min(0.25,(sp/MAX_SPEED)*0.2))); }
     drawBicycleShape();
     ctx.restore();
   }
 
-  function render(){
-    drawGround();
-    drawPath();
-    scene.mounds.forEach(drawMound);
-    scene.ponds.forEach(drawPond);
+  function drawDust(){
+    dust.forEach(d=>{
+      const s=toScreen(d.x,d.y);
+      ctx.fillStyle=`rgba(255,255,255,${0.5*(d.life/0.5)})`;
+      ctx.beginPath(); ctx.arc(s.x,s.y,d.r,0,Math.PI*2); ctx.fill();
+    });
+  }
 
-    // depth-sorted scenery + bike
-    const entities = [];
-    scene.trees.forEach(t=> entities.push({y:t.y, draw:()=>drawTree(t)}));
-    scene.rocks.forEach(r=> entities.push({y:r.y, draw:()=>drawRock(r)}));
-    entities.push({y:scene.flag.y, draw:drawFlag});
-    entities.push({y:bike.y, draw:drawBike});
-    entities.sort((a,b)=> a.y - b.y);
-    entities.forEach(e=> e.draw());
+  function render(){
+    drawSky();
+    drawRibbon();
+    drawDust();
+    const ents=[];
+    trail.scenery.forEach(sc=>{
+      if (sc.type==='cones') sc.cones.forEach(c=> ents.push({y:c.y, draw:()=>drawCone(c)}));
+      else if (sc.type==='boulder') ents.push({y:sc.y, draw:()=>drawBoulder(sc)});
+      else if (sc.type==='tree') ents.push({y:sc.y, draw:()=>drawTree(sc)});
+    });
+    ents.push({y:trail.flag.y, draw:drawFlag});
+    ents.push({y:bike.y, draw:drawBike});
+    ents.sort((a,b)=> b.y - a.y);
+    ents.forEach(e=> e.draw());
   }
 
   /* ======================= LOOP ======================= */
-  let lastTs = 0;
+  let lastTs=0;
   function loop(ts){
-    rafId = requestAnimationFrame(loop);
-    const dt = Math.min(0.05, (ts - lastTs)/1000 || 0);
-    lastTs = ts;
-    if (running){
-      update(dt);
-      render();
-    }
+    rafId=requestAnimationFrame(loop);
+    const dt=Math.min(0.05,(ts-lastTs)/1000||0);
+    lastTs=ts;
+    if (running){ update(dt); render(); }
   }
 })();
 </script>
