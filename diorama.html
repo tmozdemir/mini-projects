@@ -173,8 +173,9 @@
   const ACCEL     = 7;
   const BIKE_R    = 11;
   const HOP_DURATION = 0.42;
-  const PATH_HALF_WIDTH = 95;
-  const EDGE_FALL = 26;
+  const PATH_HALF_WIDTH = 135;
+  const EDGE_FALL = 8;          // small grace past the lip before the drop begins
+  const DROP_DURATION = 0.65;   // seconds of falling-off animation before FAIL
   const CAM_AHEAD = 150;
 
   /* ======================= PALETTE ======================= */
@@ -268,6 +269,9 @@
   let elapsed = 0;
   let rafId = null;
   let failing = false;
+  let dropping = false;       // mid fall-off-the-edge animation
+  let dropTimer = 0;
+  let dropVZ = 0;             // virtual downward fall speed for the drop animation
   let checkpointIdx = 0;
 
   const bike = { x:0, y:0, vx:0, vy:0, hopTimer:0, hopping:false, hopVX:0, hopVY:0 };
@@ -370,7 +374,7 @@
     trail = buildTrail(def);
     bike.x = trail.start.x; bike.y = trail.start.y;
     bike.vx=0; bike.vy=0; bike.hopping=false; bike.hopTimer=0; bike.hopVX=0; bike.hopVY=0;
-    wheelSpin=0; bikeHeading=-Math.PI/2; dust=[]; checkpointIdx=0; failing=false;
+    wheelSpin=0; bikeHeading=-Math.PI/2; dust=[]; checkpointIdx=0; failing=false; dropping=false; dropTimer=0; dropVZ=0;
     const tg = tangentAt(trail.centre, 0);
     cam.angle = Math.atan2(tg.y, tg.x) + Math.PI/2;
     cam.x = bike.x; cam.y = bike.y;
@@ -410,6 +414,15 @@
     els.endNextBtn.classList.toggle('hidden', trail.id>=TRAILS.length);
     els.gameScreen.classList.add('hidden');
     els.endScreen.classList.remove('hidden');
+  }
+
+  function startDrop(){
+    if (dropping || failing) return;
+    dropping = true;
+    dropTimer = 0;
+    dropVZ = 0;
+    touch.active = false;
+    // keep whatever outward momentum the bike had; it'll carry it over the edge
   }
 
   function triggerFail(){
@@ -494,6 +507,22 @@
   function update(dt){
     if (!running || !started) return;
     if (failing){ return; }
+
+    if (dropping){
+      dropTimer += dt;
+      // keep coasting in the direction it left the path, with a little drag
+      bike.x += bike.vx*dt;
+      bike.y += bike.vy*dt;
+      bike.vx *= 0.985; bike.vy *= 0.985;
+      // virtual fall accelerates (used by drawBike to sink & shrink the sprite)
+      dropVZ += 900*dt;
+      if (dropTimer >= DROP_DURATION){
+        dropping = false;
+        triggerFail();
+      }
+      return;
+    }
+
     elapsed += dt;
 
     let targetVX=0, targetVY=0;
@@ -553,8 +582,8 @@
 
     const near = nearestOnPath(bike.x, bike.y);
     if (near.idx > checkpointIdx) checkpointIdx = near.idx;
-    if (!bike.hopping && Math.abs(near.lateral) > PATH_HALF_WIDTH + EDGE_FALL){
-      triggerFail();
+    if (!bike.hopping && !dropping && Math.abs(near.lateral) > PATH_HALF_WIDTH + EDGE_FALL){
+      startDrop();
     }
 
     // average the path direction over a look-ahead window so the camera
@@ -680,7 +709,7 @@
   function drawDirectionalBike(heading){
     const W=C.bikeDark, FRAME=C.bikeFrame, SKIN=C.skin, SHIRT='#3a78c8', SHIRT_DK='#2c5c9c';
 
-    const STEPS=16;
+    const STEPS=32;
     const q = Math.round(heading/(2*Math.PI)*STEPS)/STEPS*(2*Math.PI);
 
     const along = Math.cos(q);          // + = travelling right, - = left
@@ -774,6 +803,22 @@
 
   function drawBike(){
     const s=toScreen(bike.x,bike.y);
+
+    if (dropping){
+      // falling off the edge: sink down-screen, shrink, fade, and tumble
+      const t = Math.min(1, dropTimer/DROP_DURATION);
+      const sink = dropVZ * 0.045;
+      const scale = Math.max(0.15, 1 - t*0.8);
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, 1 - t*0.9);
+      ctx.translate(s.x, s.y - 8 + sink);
+      ctx.scale(scale, scale);
+      ctx.rotate(t * Math.PI * 2.2);   // tumble as it falls
+      drawDirectionalBike(bikeHeading);
+      ctx.restore();
+      return;
+    }
+
     const hopFrac = bike.hopping ? Math.sin(Math.min(1,bike.hopTimer/HOP_DURATION)*Math.PI) : 0;
     const lift=hopFrac*30, shadowScale=1-hopFrac*0.55;
     drawShadow({x:s.x,y:s.y}, 15*shadowScale, 7*shadowScale);
@@ -804,14 +849,16 @@
     drawRibbon();
     drawDust();
     const ents=[];
+    // sort key is each object's SCREEN y after projection, so layering respects the
+    // rotating camera: whatever is lower on screen (nearer) draws last / on top.
     trail.scenery.forEach(sc=>{
-      if (sc.type==='cones') sc.cones.forEach(c=> ents.push({y:c.y, draw:()=>drawCone(c)}));
-      else if (sc.type==='boulder') ents.push({y:sc.y, draw:()=>drawBoulder(sc)});
-      else if (sc.type==='tree') ents.push({y:sc.y, draw:()=>drawTree(sc)});
+      if (sc.type==='cones') sc.cones.forEach(c=> ents.push({sy:toScreen(c.x,c.y).y, draw:()=>drawCone(c)}));
+      else if (sc.type==='boulder') ents.push({sy:toScreen(sc.x,sc.y).y, draw:()=>drawBoulder(sc)});
+      else if (sc.type==='tree') ents.push({sy:toScreen(sc.x,sc.y).y, draw:()=>drawTree(sc)});
     });
-    ents.push({y:trail.flag.y, draw:drawFlag});
-    ents.push({y:bike.y, draw:drawBike});
-    ents.sort((a,b)=> b.y - a.y);
+    ents.push({sy:toScreen(trail.flag.x,trail.flag.y).y, draw:drawFlag});
+    ents.push({sy: dropping ? 99999 : toScreen(bike.x,bike.y).y, draw:drawBike});
+    ents.sort((a,b)=> a.sy - b.sy);
     ents.forEach(e=> e.draw());
   }
 
