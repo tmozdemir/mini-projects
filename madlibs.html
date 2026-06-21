@@ -165,8 +165,8 @@
       <div class="panel-title">Title</div>
       <input type="text" id="customTitle" placeholder="e.g. The Office Disaster">
       <div class="panel-title">Story Template</div>
-      <textarea id="customTemplate" placeholder="One {adjective} morning, {name} walked into the {place} carrying a {noun}..."></textarea>
-      <div class="small-note">Suggested tags: {noun} {plural_noun} {adjective} {adverb} {verb} {verb_ing} {verb_past} {name} {place} {animal} {food} {number} {body_part} {color} {exclamation} {celebrity}</div>
+      <textarea id="customTemplate" placeholder="One {adjective:describe the morning} morning, {name} walked into the {place} carrying a {noun}..."></textarea>
+      <div class="small-note">Suggested tags: {noun} {plural_noun} {adjective} {adverb} {verb} {verb_ing} {verb_past} {name} {place} {animal} {food} {number} {body_part} {color} {exclamation} {celebrity} — add a colon for a specific hint, e.g. {noun:something he was carrying}</div>
       <button class="btn primary" id="saveCustom">SAVE STORY</button>
       <button class="btn ghost" id="cancelCustom">CANCEL</button>
     </div>
@@ -210,37 +210,37 @@
       id: 'office',
       title: 'The Office Disaster',
       desc: 'Corporate chaos, ruined by one bad printer.',
-      template: "It was a {adjective} Monday morning when {name} arrived at the office carrying a {adjective2} {noun}. The boss, who everyone called \"{nickname}\", stood up and shouted \"{exclamation}!\" The printer had jammed for the {number}th time that week, spitting out {plural_noun} all over the {place}. {name2} tried to {verb} it back to life, but it just kept {verb_ing} louder. By lunchtime, the entire team was eating {food} under their desks, whispering about the {adjective3} smell coming from the supply closet."
+      template: "It was a {adjective:describe the kind of Monday it was} Monday morning when {name:who walked into the office} arrived carrying a {adjective2:another describing word} {noun:something they were carrying}. The boss, who everyone called \"{nickname:a silly office nickname}\", stood up at exactly 9:15am and shouted \"{exclamation:something you'd yell across an office}!\" The printer on the third floor had jammed for the {number:how many times this week} time, spitting out {plural_noun:more than one of something} all over the {place:a room or area in the building}. {name2:a second person's name} tried to {verb:an action to fix the printer} it back to life, but it just kept {verb_ing:an -ing action} louder and louder, drawing a small crowd. By lunchtime, half the team was hiding under their desks eating {food:a food item}, whispering nervously about the {adjective3:a third describing word} smell now coming from the supply closet, and nobody dared open the door."
     },
     {
       id: 'holiday',
       title: 'Holiday Gone Wrong',
       desc: 'A family trip that spirals delightfully out of control.',
-      template: "The {name} family packed their {adjective} suitcases and flew to {place}. Within an hour, {name2} had lost a {body_part} in the hotel pool and a {animal} had stolen their {noun}. \"{exclamation}!\" yelled Dad, chasing it down the {adjective2} street while {verb_ing} the whole way. That night they ate {number} plates of {food} and agreed it was the most {adjective3} holiday they'd ever had."
+      template: "The {name:a family surname} family packed their {adjective:describe the suitcases} suitcases at 4am and flew six hours to {place:a holiday destination}. Within an hour of checking in, {name2:a family member's name} had lost a {body_part:a part of the body} in the hotel pool and a wild {animal:a creature, any kind} had stolen their {noun:an object from the hotel room} straight off the balcony. \"{exclamation:something shouted in a panic}!\" yelled Dad, sprinting down the {adjective2:another describing word} street while {verb_ing:an -ing action} the entire way, sandals flapping. That night, exhausted and sunburnt, the family sat down and ate {number:a number} full plates of {food:a food item} at a roadside restaurant, and unanimously agreed it had been the most {adjective3:a third describing word} holiday they had ever shared — and they were already planning to come back next year."
     },
     {
       id: 'detective',
       title: 'The Case of the Missing Sandwich',
       desc: 'A hard-boiled detective mystery, with extremely low stakes.',
-      template: "Detective {name} had seen a lot in this town, but nothing like the case of the missing {food}. It vanished from the {place} at exactly {number} o'clock, leaving behind only a single {color} {noun}. \"{exclamation}\",  muttered the detective, lighting a {adjective} cigar. The prime suspect: a {adjective2} {animal} with a taste for {plural_noun} and a habit of {verb_ing} through windows. The case would not {verb} itself."
+      template: "Detective {name:the detective's name} had seen a lot in this town — betrayal, rain, bad coffee — but nothing quite like the case of the missing {food:the food item that vanished}. It disappeared from the office fridge at the {place:a workplace location} at exactly {number:a time, just the number} o'clock, leaving behind only a single {color:a colour} {noun:an object left at the scene} as a clue. \"{exclamation:a hard-boiled detective catchphrase}\", muttered the detective, lighting a {adjective:describe the cigar} cigar and staring out the rain-streaked window. The prime suspect: a {adjective2:describe the suspect} {animal:the suspect, an animal} with a known taste for {plural_noun:things this suspect likes to eat} and a long rap sheet for {verb_ing:an -ing crime} through open windows after dark. The case, like the sandwich, would not {verb:an action verb} itself — and the clock was ticking."
     },
     {
       id: 'space',
       title: 'Mission to Planet Zarg',
       desc: 'Sci-fi heroics with questionable engineering.',
-      template: "Captain {name} stared out at the {color} void of space, gripping a {adjective} {noun}. \"{exclamation}, we're losing {body_part} power!\" crackled the radio. Below them, Planet Zarg pulsed with {number} {adjective2} moons, each one home to a species of {plural_noun} that loved nothing more than {verb_ing}. The crew had one mission: land the ship near the {place}, without waking the {animal} that slept beneath the {adjective3} sand."
+      template: "Captain {name:the captain's name} stared out at the {color:a colour for the void of space} void of space, gripping a {adjective:describe the object} {noun:an object the captain is holding} tightly in one hand. \"{exclamation:something shouted into a radio}, we're losing {body_part:a body part, used as a system name} power!\" crackled the radio from somewhere below deck. Below them, Planet Zarg pulsed with {number:how many moons} {adjective2:describe the moons} moons, each one home to a strange species of {plural_noun:alien creatures, plural} that loved nothing more than {verb_ing:an -ing hobby} all day long. The crew had one mission, and one shot at it: land the ship quietly near the {place:a landing zone} without waking the enormous {animal:a sleeping creature} that slept beneath the {adjective3:a third describing word} sand, dreaming of a planet it once called home."
     },
     {
       id: 'recipe',
-      title: 'Grandma\'s Secret Recipe',
+      title: "Grandma's Secret Recipe",
       desc: 'A cherished family dish, slightly mistranslated.',
-      template: "To make Grandma {name}'s famous {food}, first {verb} two cups of {plural_noun} in a {color} bowl. Add a {adjective} pinch of {noun}, then {verb_ing} gently for {number} minutes while singing to a {animal}. Grandma always said \"{exclamation}\" right before serving it at the {place}, and everyone agreed it was the most {adjective2} thing they'd ever tasted — even {name2}, who hates {food2}."
+      template: "To make Grandma {name:grandma's first name}'s famous {food:the name of the dish}, you must first {verb:an action for preparing the dish} two full cups of {plural_noun:an ingredient, plural} in a {color:a colour} mixing bowl, the same one she's used for forty years. Add a {adjective:describe the pinch} pinch of {noun:a strange ingredient}, then keep {verb_ing:an -ing action} gently for {number:how many minutes} minutes while singing softly to a {animal:an animal you sing to, oddly} that always seems to wander into the kitchen at this exact moment. Grandma always said \"{exclamation:grandma's catchphrase}\" right before serving it proudly at the {place:where it's served}, and everyone at the table agreed it was the most {adjective2:another describing word} thing they had ever tasted — everyone, that is, except {name2:someone who didn't enjoy it}, who has always hated {food2:a food this person dislikes} and never lets anyone forget it."
     },
     {
       id: 'sports',
       title: 'The Big Match',
       desc: 'Underdogs, last-minute drama, glory.',
-      template: "With {number} seconds on the clock, {name} sprinted across the {place}, {body_part} aching, clutching the {noun} like their life depended on it. The crowd was {adjective}, chanting \"{exclamation}!\" as a {color} {animal} somehow wandered onto the pitch. Coach {name2} could only {verb} from the sidelines, {verb_ing} into a megaphone, as the team pulled off the most {adjective2} comeback in {place2} history."
+      template: "With only {number:seconds left on the clock} seconds left on the clock and the score level, {name:the player's name} sprinted across the {place:the playing surface}, {body_part:a body part, aching from the effort} aching, clutching the {noun:the object of the game} like their life depended on it. The crowd had gone completely {adjective:describe the crowd's mood}, chanting \"{exclamation:a crowd chant}!\" over and over, just as a {color:a colour} {animal:a creature that wanders onto the pitch} casually wandered onto the pitch from nowhere. Coach {name2:the coach's name} could only {verb:an action the coach does helplessly} from the sidelines, {verb_ing:an -ing action with a megaphone} into a megaphone that had clearly stopped working an hour ago, as the team somehow pulled off the most {adjective2:a final describing word} comeback in {place2:a place associated with the team} sporting history."
     }
   ];
 
@@ -271,9 +271,9 @@
     celebrity: ["Name a celebrity.", "Anyone famous, living or dead."]
   };
 
-  function promptFor(tag){
+  function promptFor(tag, hint){
+    if (hint) return hint.charAt(0).toUpperCase() + hint.slice(1) + '.';
     const base = tag.replace(/\d+$/, '').replace(/[0-9]/g,'');
-    const cleanTag = tag.replace(/(\d+)$/, '$1');
     const list = CATEGORY_PROMPTS[tag] || CATEGORY_PROMPTS[base] || [`Give me a "${tag}".`];
     return list[Math.floor(Math.random()*list.length)];
   }
@@ -381,10 +381,11 @@
   // ---------- Start game ----------
   document.getElementById('startGameBtn').addEventListener('click', ()=>{
     if (!selectedStory){ alert('Pick a story first.'); return; }
-    const tagMatches = [...selectedStory.template.matchAll(/\{([a-zA-Z0-9_]+)\}/g)];
+    const tagMatches = [...selectedStory.template.matchAll(/\{([a-zA-Z0-9_]+)(?::([^}]+))?\}/g)];
     if (tagMatches.length === 0){ alert('That story has no blanks!'); return; }
     blanks = tagMatches.map((m, i) => ({
       tag: m[1],
+      hint: m[2] || '',
       answer: '',
       owner: players[i % players.length]
     }));
@@ -418,7 +419,7 @@
     const b = blanks[blankIndex];
     turnWho.textContent = b.owner.toUpperCase() + "'S TURN";
     turnCat.textContent = labelFor(b.tag);
-    turnPrompt.textContent = promptFor(b.tag);
+    turnPrompt.textContent = promptFor(b.tag, b.hint);
     answerInput.value = '';
     renderProgress();
     setTimeout(()=>answerInput.focus(), 50);
@@ -443,7 +444,7 @@
     let out = selectedStory.template;
     let html = '';
     let lastIndex = 0;
-    const re = /\{([a-zA-Z0-9_]+)\}/g;
+    const re = /\{([a-zA-Z0-9_]+)(?::([^}]+))?\}/g;
     let match;
     let bi = 0;
     while ((match = re.exec(selectedStory.template)) !== null){
