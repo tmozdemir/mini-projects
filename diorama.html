@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Open Trail</title>
+<style>
+  :root{
+    --bg:#0d1410;
+    --panel:#121c16;
+    --panel-2:#1a261e;
+    --line:#33453a;
+    --bone:#e8e4d8;
+    --dim:#7c8a7e;
+    --green:#5fd97a;
+    --green-dim:#1f3d28;
+    --red:#ff6b4a;
+    --amber:#e8b84a;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; touch-action:none;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    background:radial-gradient(ellipse at 50% 0%, #16241a 0%, var(--bg) 60%);
+    color:var(--bone);
+    font-family:'IBM Plex Mono', ui-monospace, monospace;
+    min-height:100vh;
+    display:flex; align-items:center; justify-content:center;
+    padding:16px 12px;
+    overscroll-behavior:none;
+  }
+  .scope{ width:100%; max-width:440px; }
+  .crt-frame{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:18px;
+    box-shadow:0 0 0 1px rgba(95,217,122,0.06), 0 30px 60px -20px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.03);
+    overflow:hidden;
+  }
+  .statusbar{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:12px 16px; border-bottom:1px solid var(--line);
+    font-size:0.7rem; letter-spacing:0.08em; color:var(--dim); text-transform:uppercase;
+  }
+  .statusbar .label{ display:flex; align-items:center; gap:8px; }
+  .dot-led{ width:7px; height:7px; border-radius:50%; background:var(--green); box-shadow:0 0 8px var(--green); animation:pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+  .hidden{ display:none !important; }
+
+  .screen{ padding:26px 20px; }
+  .screen-title{ font-size:0.66rem; letter-spacing:0.13em; color:var(--dim); text-transform:uppercase; margin-bottom:6px; text-align:center; }
+  .screen-sub{ font-size:0.8rem; color:var(--dim); text-align:center; margin-bottom:22px; line-height:1.5; }
+
+  .level-card{
+    display:flex; align-items:center; gap:14px;
+    background:var(--panel-2); border:1px solid var(--line); border-radius:10px;
+    padding:14px 16px; margin-bottom:10px; cursor:pointer;
+  }
+  .level-card.locked{ opacity:0.4; pointer-events:none; }
+  .level-card .num{
+    width:34px; height:34px; flex-shrink:0; border-radius:50%;
+    border:1px solid var(--green); color:var(--green);
+    display:flex; align-items:center; justify-content:center; font-weight:700;
+  }
+  .level-card .meta{ flex:1; }
+  .level-card .name{ font-size:0.92rem; font-weight:700; color:var(--bone); }
+  .level-card .theme{ font-size:0.7rem; color:var(--dim); margin-top:2px; }
+  .level-card .best{ font-size:0.68rem; color:var(--amber); margin-top:3px; }
+  .level-card .arrow{ color:var(--dim); font-size:1.1rem; }
+
+  .control-help{
+    border:1px solid var(--line); border-radius:10px; padding:14px;
+    font-size:0.72rem; color:var(--dim); line-height:1.6; margin-top:18px;
+  }
+  .control-help b{ color:var(--bone); }
+
+  .game-wrap{ position:relative; line-height:0; }
+  #gameCanvas{ width:100%; display:block; }
+  .touch-layer{ position:absolute; inset:0; z-index:5; }
+  .hud{
+    position:absolute; top:0; left:0; right:0; z-index:6;
+    display:flex; justify-content:space-between; align-items:flex-start;
+    padding:10px 12px; pointer-events:none;
+  }
+  .hud-chip{
+    background:rgba(13,20,16,0.7); border:1px solid rgba(95,217,122,0.4);
+    border-radius:6px; padding:5px 9px; font-size:0.68rem; color:var(--green);
+    letter-spacing:0.04em; font-family:'IBM Plex Mono',monospace;
+  }
+  .quit-btn{
+    position:absolute; bottom:10px; left:10px; z-index:6;
+    background:rgba(13,20,16,0.75); border:1px solid var(--line); color:var(--dim);
+    font-family:'IBM Plex Mono',monospace; font-size:0.65rem; letter-spacing:0.05em; text-transform:uppercase;
+    padding:7px 11px; border-radius:6px; pointer-events:auto;
+  }
+  .start-overlay{
+    position:absolute; inset:0; z-index:9; background:rgba(8,12,9,0.82);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    text-align:center; padding:30px;
+  }
+  .start-overlay .big{ font-size:1.4rem; margin-bottom:14px; }
+  .start-overlay .tip{ font-size:0.78rem; color:var(--dim); line-height:1.7; margin-bottom:22px; max-width:280px; }
+  .start-overlay .tip b{ color:var(--amber); }
+  .go-btn{
+    background:var(--green-dim); border:1px solid var(--green); color:var(--green);
+    font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:0.8rem; letter-spacing:0.06em;
+    text-transform:uppercase; padding:13px 26px; border-radius:10px;
+  }
+
+  .end-screen{ padding:40px 24px; text-align:center; }
+  .end-screen .big-icon{ font-size:2.6rem; margin-bottom:10px; }
+  .end-screen .result{ font-size:1.25rem; font-weight:700; color:var(--green); margin-bottom:6px; }
+  .end-screen .time{ font-size:1rem; color:var(--amber); margin-bottom:24px; }
+  .end-row{ display:flex; gap:10px; }
+  .end-btn{
+    flex:1; font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:0.78rem; letter-spacing:0.05em;
+    text-transform:uppercase; padding:13px 0; border-radius:10px; cursor:pointer;
+  }
+  .end-btn.primary{ background:var(--green-dim); border:1px solid var(--green); color:var(--green); }
+  .end-btn.ghost{ background:var(--panel-2); border:1px solid var(--line); color:var(--dim); }
+</style>
+</head>
+<body>
+
+<div class="scope">
+  <div class="crt-frame">
+
+    <div class="statusbar">
+      <div class="label"><a href="index.html" style="color:var(--dim); text-decoration:none;">&larr;</a> <span class="dot-led"></span> OPEN TRAIL</div>
+      <div id="statusRight"></div>
+    </div>
+
+    <div id="selectScreen" class="screen">
+      <div class="screen-title">Open Trail</div>
+      <div class="screen-sub">Roam an open diorama to the flag. Hold and drag the reins — go anywhere.</div>
+      <div id="levelList"></div>
+      <div class="control-help">
+        <b>Touch &amp; hold</b> anywhere to grab the reins.<br>
+        <b>Drag</b> &mdash; the bike heads the <i>opposite</i> way from your drag.<br>
+        <b>Drag further</b> &mdash; more speed.<br>
+        <b>Lift your finger</b> &mdash; a little hop over rocks &amp; water.
+      </div>
+    </div>
+
+    <div id="gameScreen" class="hidden">
+      <div class="game-wrap">
+        <canvas id="gameCanvas" width="380" height="560"></canvas>
+        <div class="hud">
+          <div class="hud-chip" id="timeChip">0.0s</div>
+          <div class="hud-chip" id="bestChip"></div>
+        </div>
+        <div class="touch-layer" id="touchLayer"></div>
+        <button class="quit-btn" id="quitBtn">⏏ Quit</button>
+        <div class="start-overlay" id="startOverlay">
+          <div class="big" id="overlayTitle">Meadow Loop</div>
+          <div class="tip">Touch and hold to grab the reins. Drag the <b>opposite</b> way you want to go, and further for more speed. Lift your finger for a little hop. Find the flag!</div>
+          <button class="go-btn" id="goBtn">Touch to Ride</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="endScreen" class="end-screen hidden">
+      <div class="big-icon">🚩</div>
+      <div class="result">FLAG REACHED</div>
+      <div class="time" id="finishTime">0.0s</div>
+      <div class="end-row">
+        <button class="end-btn ghost" id="endMenuBtn">Menu</button>
+        <button class="end-btn primary" id="endNextBtn">Next Scene</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function(){
+  /* ======================= CONSTANTS ======================= */
+  const CANVAS_W = 380, CANVAS_H = 560;
+  const V_SCALE   = 0.62;   // vertical compression for the tilted-down look
+  const MAX_DRAG  = 110;    // px for full speed
+  const MAX_SPEED = 260;    // world units / sec
+  const ACCEL     = 7;      // velocity lerp rate
+  const BIKE_R    = 13;
+  const HOP_DURATION = 0.32;
+
+  /* ======================= SCENES ======================= */
+  const SCENES = [
+    {
+      id:1, name:'Meadow Loop',
+      worldW:1100, worldH:1300,
+      start:{x:120,y:1150}, flag:{x:950,y:160},
+      path:[[120,1150],[300,1000],[500,950],[650,700],[800,500],[900,300],[950,160]],
+      mounds:[{x:300,y:850,r:70},{x:700,y:450,r:90}],
+      ponds:[{x:550,y:650,rx:90,ry:55}],
+      trees:[{x:200,y:900},{x:850,y:850},{x:980,y:700},{x:150,y:500},{x:650,y:250},{x:400,y:200}],
+      rocks:[{x:500,y:1050},{x:760,y:600},{x:300,y:300}]
+    },
+    {
+      id:2, name:'Rocky Pass',
+      worldW:1200, worldH:1300,
+      start:{x:100,y:1150}, flag:{x:1080,y:150},
+      path:[[100,1150],[250,1000],[300,800],[500,750],[650,600],[600,400],[800,300],[1000,250],[1080,150]],
+      mounds:[{x:400,y:900,r:80}],
+      ponds:[{x:650,y:500,rx:110,ry:60}],
+      trees:[{x:150,y:850},{x:900,y:1000},{x:1050,y:800},{x:200,y:400},{x:850,y:150},{x:450,y:200}],
+      rocks:[
+        {x:300,y:1000},{x:350,y:950},{x:550,y:850},{x:750,y:800},{x:850,y:650},{x:900,y:550},
+        {x:500,y:300},{x:700,y:200},{x:950,y:400}
+      ]
+    }
+  ];
+
+  /* ======================= STATE ======================= */
+  const els = {
+    statusRight: document.getElementById('statusRight'),
+    selectScreen: document.getElementById('selectScreen'),
+    gameScreen: document.getElementById('gameScreen'),
+    endScreen: document.getElementById('endScreen'),
+    levelList: document.getElementById('levelList'),
+    canvas: document.getElementById('gameCanvas'),
+    touchLayer: document.getElementById('touchLayer'),
+    timeChip: document.getElementById('timeChip'),
+    bestChip: document.getElementById('bestChip'),
+    startOverlay: document.getElementById('startOverlay'),
+    overlayTitle: document.getElementById('overlayTitle'),
+    goBtn: document.getElementById('goBtn'),
+    quitBtn: document.getElementById('quitBtn'),
+    finishTime: document.getElementById('finishTime'),
+    endMenuBtn: document.getElementById('endMenuBtn'),
+    endNextBtn: document.getElementById('endNextBtn'),
+  };
+  const ctx = els.canvas.getContext('2d');
+
+  const PROGRESS_KEY = 'opentrail_progress_v1';
+  function loadProgress(){
+    try { return JSON.parse(localStorage.getItem(PROGRESS_KEY)) || {unlocked:1, best:{}}; }
+    catch(e){ return {unlocked:1, best:{}}; }
+  }
+  function saveProgress(p){ try{ localStorage.setItem(PROGRESS_KEY, JSON.stringify(p)); }catch(e){} }
+  let progress = loadProgress();
+
+  let scene = null;
+  let running = false, started = false;
+  let elapsed = 0;
+  let rafId = null;
+
+  const bike = { x:0, y:0, vx:0, vy:0, hopTimer:0, hopping:false, angle:0 };
+  const cam = { x:0, y:0 };
+  const touch = { active:false, anchorX:0, anchorY:0, curX:0, curY:0 };
+
+  /* ======================= LEVEL SELECT UI ======================= */
+  function renderLevelList(){
+    els.levelList.innerHTML = '';
+    SCENES.forEach(sc=>{
+      const unlocked = sc.id <= progress.unlocked;
+      const card = document.createElement('div');
+      card.className = 'level-card' + (unlocked ? '' : ' locked');
+      const best = progress.best[sc.id];
+      card.innerHTML = `
+        <div class="num">${unlocked ? sc.id : '🔒'}</div>
+        <div class="meta">
+          <div class="name">${sc.name}</div>
+          <div class="theme">open diorama</div>
+          ${best ? `<div class="best">Best: ${best.toFixed(1)}s</div>` : ''}
+        </div>
+        <div class="arrow">▶</div>
+      `;
+      if (unlocked) card.addEventListener('click', ()=> startScene(sc.id));
+      els.levelList.appendChild(card);
+    });
+  }
+  renderLevelList();
+
+  /* ======================= LIFECYCLE ======================= */
+  function startScene(id){
+    scene = SCENES.find(s=>s.id===id);
+    bike.x = scene.start.x; bike.y = scene.start.y;
+    bike.vx = 0; bike.vy = 0; bike.hopping = false; bike.hopTimer = 0; bike.angle = 0;
+    cam.x = bike.x; cam.y = bike.y;
+    elapsed = 0;
+    started = false;
+    touch.active = false;
+
+    els.overlayTitle.textContent = scene.name;
+    els.startOverlay.classList.remove('hidden');
+    els.selectScreen.classList.add('hidden');
+    els.endScreen.classList.add('hidden');
+    els.gameScreen.classList.remove('hidden');
+    els.statusRight.textContent = scene.name.toUpperCase();
+    const best = progress.best[scene.id];
+    els.bestChip.textContent = best ? ('best ' + best.toFixed(1) + 's') : '';
+
+    running = true;
+    if (!rafId) loop(performance.now());
+  }
+
+  function quitToMenu(){
+    running = false; started = false;
+    if (rafId){ cancelAnimationFrame(rafId); rafId = null; }
+    els.gameScreen.classList.add('hidden');
+    els.endScreen.classList.add('hidden');
+    els.selectScreen.classList.remove('hidden');
+    renderLevelList();
+    els.statusRight.textContent = '';
+  }
+
+  function completeScene(){
+    running = false;
+    const t = elapsed;
+    if (!progress.best[scene.id] || t < progress.best[scene.id]) progress.best[scene.id] = t;
+    if (progress.unlocked === scene.id && scene.id < SCENES.length) progress.unlocked = scene.id + 1;
+    saveProgress(progress);
+
+    els.finishTime.textContent = t.toFixed(1) + 's';
+    const hasNext = scene.id < SCENES.length;
+    els.endNextBtn.classList.toggle('hidden', !hasNext);
+    els.gameScreen.classList.add('hidden');
+    els.endScreen.classList.remove('hidden');
+  }
+
+  /* ======================= INPUT ======================= */
+  function pointFromEvent(e){
+    const rect = els.touchLayer.getBoundingClientRect();
+    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  }
+  function pointerDown(e){
+    if (!started){ started = true; els.startOverlay.classList.add('hidden'); }
+    touch.active = true;
+    const p = pointFromEvent(e);
+    touch.anchorX = p.x; touch.anchorY = p.y;
+    touch.curX = p.x; touch.curY = p.y;
+    try { els.touchLayer.setPointerCapture(e.pointerId); } catch(err){}
+  }
+  function pointerMove(e){
+    if (!touch.active) return;
+    const p = pointFromEvent(e);
+    touch.curX = p.x; touch.curY = p.y;
+  }
+  function pointerUp(e){
+    if (!touch.active) return;
+    touch.active = false;
+    if (!bike.hopping){
+      bike.hopping = true;
+      bike.hopTimer = 0;
+    }
+  }
+  els.touchLayer.addEventListener('pointerdown', pointerDown);
+  els.touchLayer.addEventListener('pointermove', pointerMove);
+  els.touchLayer.addEventListener('pointerup', pointerUp);
+  els.touchLayer.addEventListener('pointercancel', pointerUp);
+  els.goBtn.addEventListener('click', ()=>{ started = true; els.startOverlay.classList.add('hidden'); });
+  els.quitBtn.addEventListener('click', quitToMenu);
+  els.endMenuBtn.addEventListener('click', quitToMenu);
+  els.endNextBtn.addEventListener('click', ()=>{ if (scene.id < SCENES.length) startScene(scene.id + 1); });
+
+  /* ======================= COLLISION HELPERS ======================= */
+  function resolveCircle(obj, r){
+    const dx = bike.x - obj.x, dy = bike.y - obj.y;
+    const dist = Math.hypot(dx,dy);
+    const minDist = r + BIKE_R;
+    if (dist < minDist && dist > 0.001){
+      const nx = dx/dist, ny = dy/dist;
+      const push = (minDist - dist);
+      bike.x += nx * push;
+      bike.y += ny * push;
+      // kill the velocity component driving into the obstacle so the bike slides, not jitters
+      const vDotN = bike.vx*nx + bike.vy*ny;
+      if (vDotN < 0){
+        bike.vx -= vDotN * nx;
+        bike.vy -= vDotN * ny;
+      }
+    }
+  }
+
+  /* ======================= PHYSICS ======================= */
+  function update(dt){
+    if (!running || !started) return;
+    elapsed += dt;
+
+    let targetVX = 0, targetVY = 0;
+    if (touch.active){
+      const dx = touch.curX - touch.anchorX;
+      const dy = touch.curY - touch.anchorY;
+      const dragDist = Math.hypot(dx,dy);
+      const speedFrac = Math.max(0, Math.min(1, dragDist / MAX_DRAG));
+      if (dragDist > 4){
+        const dirX = -dx / dragDist;
+        const dirY = -dy / dragDist;
+        targetVX = dirX * speedFrac * MAX_SPEED;
+        targetVY = (dirY * speedFrac * MAX_SPEED) / V_SCALE;
+        bike.angle = Math.atan2(dirY, dirX);
+      }
+    }
+
+    bike.vx += (targetVX - bike.vx) * Math.min(1, ACCEL*dt);
+    bike.vy += (targetVY - bike.vy) * Math.min(1, ACCEL*dt);
+
+    bike.x += bike.vx * dt;
+    bike.y += bike.vy * dt;
+    bike.x = Math.max(20, Math.min(scene.worldW-20, bike.x));
+    bike.y = Math.max(20, Math.min(scene.worldH-20, bike.y));
+
+    if (bike.hopping){
+      bike.hopTimer += dt;
+      if (bike.hopTimer >= HOP_DURATION) bike.hopping = false;
+    } else {
+      // soft collision only when not hopping (a hop lets you skim over small obstacles)
+      scene.trees.forEach(t=> resolveCircle(t, 22));
+      scene.rocks.forEach(r=> resolveCircle(r, 20));
+    }
+
+    // ponds gently slow you down, never block
+    let inPond = false;
+    scene.ponds.forEach(p=>{
+      const dx=(bike.x-p.x)/p.rx, dy=(bike.y-p.y)/p.ry;
+      if (dx*dx+dy*dy < 1) inPond = true;
+    });
+    if (inPond && !bike.hopping){
+      bike.vx *= 0.93; bike.vy *= 0.93;
+    }
+
+    cam.x += (bike.x - cam.x) * Math.min(1, 10*dt);
+    cam.y += (bike.y - cam.y) * Math.min(1, 10*dt);
+
+    const dFlag = Math.hypot(bike.x-scene.flag.x, bike.y-scene.flag.y);
+    if (dFlag < 34){ completeScene(); return; }
+
+    els.timeChip.textContent = elapsed.toFixed(1) + 's';
+  }
+
+  /* ======================= RENDER ======================= */
+  function toScreen(wx, wy){
+    return {
+      x: CANVAS_W/2 + (wx - cam.x),
+      y: CANVAS_H/2 + (wy - cam.y) * V_SCALE
+    };
+  }
+
+  function drawGround(){
+    const grad = ctx.createLinearGradient(0,0,0,CANVAS_H);
+    grad.addColorStop(0, '#bfe6a8');
+    grad.addColorStop(1, '#9ad17e');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
+  }
+
+  function drawPath(){
+    if (!scene.path || scene.path.length < 2) return;
+    ctx.strokeStyle = 'rgba(196,166,110,0.55)';
+    ctx.lineWidth = 16;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    scene.path.forEach((pt,i)=>{
+      const s = toScreen(pt[0], pt[1]);
+      if (i===0) ctx.moveTo(s.x,s.y); else ctx.lineTo(s.x,s.y);
+    });
+    ctx.stroke();
+  }
+
+  function drawMound(m){
+    const s = toScreen(m.x, m.y);
+    const rx = m.r, ry = m.r * V_SCALE * 0.9;
+    const grad = ctx.createRadialGradient(s.x-rx*0.2, s.y-ry*0.3, ry*0.2, s.x, s.y, rx);
+    grad.addColorStop(0, '#bfe8a0');
+    grad.addColorStop(1, '#88bb66');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y, rx, ry, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  function drawPond(p){
+    const s = toScreen(p.x, p.y);
+    const ry = p.ry * V_SCALE;
+    ctx.fillStyle = '#6fb8d8';
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y, p.rx, ry, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = '#4f93b0';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y, p.rx*0.55, ry*0.45, 0, 0.3, 2.6);
+    ctx.stroke();
+  }
+
+  function drawShadow(s, rx, ry){
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y, rx, ry, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  function drawTree(t){
+    const s = toScreen(t.x, t.y);
+    drawShadow(s, 16, 7);
+    ctx.fillStyle = '#7a5230';
+    ctx.fillRect(s.x-3, s.y-22, 6, 22);
+    ctx.fillStyle = '#3c7a3f';
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y-34, 20, 18, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#4f9650';
+    ctx.beginPath();
+    ctx.ellipse(s.x-6, s.y-40, 13, 11, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  function drawRock(r){
+    const s = toScreen(r.x, r.y);
+    drawShadow(s, 14, 6);
+    ctx.fillStyle = '#9a9a92';
+    ctx.beginPath();
+    ctx.moveTo(s.x-14, s.y);
+    ctx.lineTo(s.x-9, s.y-14);
+    ctx.lineTo(s.x+6, s.y-17);
+    ctx.lineTo(s.x+15, s.y-4);
+    ctx.lineTo(s.x+10, s.y+6);
+    ctx.lineTo(s.x-8, s.y+7);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#b7b7ae';
+    ctx.beginPath();
+    ctx.moveTo(s.x-9, s.y-14);
+    ctx.lineTo(s.x+6, s.y-17);
+    ctx.lineTo(s.x, s.y-9);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawFlag(){
+    const s = toScreen(scene.flag.x, scene.flag.y);
+    drawShadow(s, 12, 5);
+    ctx.strokeStyle = '#2a2a2a';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y); ctx.lineTo(s.x, s.y-58);
+    ctx.stroke();
+    ctx.fillStyle = '#ff5d5d';
+    ctx.beginPath();
+    ctx.moveTo(s.x, s.y-58);
+    ctx.lineTo(s.x+26, s.y-49);
+    ctx.lineTo(s.x, s.y-40);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#2a2a2a';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  function drawBike(){
+    const s = toScreen(bike.x, bike.y);
+    const hopFrac = bike.hopping ? Math.sin(Math.min(1,bike.hopTimer/HOP_DURATION)*Math.PI) : 0;
+    const lift = hopFrac * 26;
+    const shadowScale = 1 - hopFrac*0.55;
+
+    drawShadow(s, 13*shadowScale, 6*shadowScale);
+
+    ctx.save();
+    ctx.translate(s.x, s.y - 6 - lift);
+    const lean = Math.max(-0.4, Math.min(0.4, (bike.vx)/MAX_SPEED*0.4));
+    ctx.rotate(lean);
+
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath(); ctx.ellipse(-9,8,6,6,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(9,8,6,6,0,0,Math.PI*2); ctx.fill();
+
+    ctx.fillStyle = '#e8a23c';
+    ctx.strokeStyle = '#2a2a2a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.ellipse(0,0,13,13,0,0,Math.PI*2);
+    ctx.fill(); ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function render(){
+    drawGround();
+    drawPath();
+    scene.mounds.forEach(drawMound);
+    scene.ponds.forEach(drawPond);
+
+    // depth-sorted scenery + bike
+    const entities = [];
+    scene.trees.forEach(t=> entities.push({y:t.y, draw:()=>drawTree(t)}));
+    scene.rocks.forEach(r=> entities.push({y:r.y, draw:()=>drawRock(r)}));
+    entities.push({y:scene.flag.y, draw:drawFlag});
+    entities.push({y:bike.y, draw:drawBike});
+    entities.sort((a,b)=> a.y - b.y);
+    entities.forEach(e=> e.draw());
+  }
+
+  /* ======================= LOOP ======================= */
+  let lastTs = 0;
+  function loop(ts){
+    rafId = requestAnimationFrame(loop);
+    const dt = Math.min(0.05, (ts - lastTs)/1000 || 0);
+    lastTs = ts;
+    if (running){
+      update(dt);
+      render();
+    }
+  }
+})();
+</script>
+
+</body>
+</html>
