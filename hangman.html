@@ -157,10 +157,11 @@
     display:flex;
     justify-content:center;
     gap:8px;
-    flex-wrap:wrap;
-    padding:6px 18px 22px;
+    flex-wrap:nowrap;
+    padding:6px 14px 22px;
   }
   .word-slot{
+    flex:0 0 auto;
     width:34px;
     text-align:center;
     border-bottom:2px solid var(--line);
@@ -320,9 +321,10 @@
     <div id="setupScreen" class="screen">
       <div class="handoff-icon">✍️</div>
       <div class="screen-title">Player 1 — Set the Word</div>
-      <div class="screen-sub">Type a secret word, 3–7 letters.<br>Player 2 shouldn't be looking!</div>
+      <div class="screen-sub">Type a secret word, 3–10 letters.<br>Player 2 shouldn't be looking!</div>
       <div class="word-input-row" id="wordInputRow"></div>
       <div class="setup-meta" id="setupMeta">&nbsp;</div>
+      <div class="setup-meta warn hidden" id="spellWarning">Not a recognised English word</div>
       <button class="primary-btn" id="confirmWordBtn" disabled>Lock in word</button>
     </div>
 
@@ -359,7 +361,7 @@
       <div class="divider-row">or guess the whole word</div>
 
       <div class="guess-word-row">
-        <input class="guess-word-input" id="guessWordInput" maxlength="7" placeholder="Type full word…" autocomplete="off" autocapitalize="characters">
+        <input class="guess-word-input" id="guessWordInput" maxlength="10" placeholder="Type full word…" autocomplete="off" autocapitalize="characters">
         <button class="guess-word-btn" id="guessWordBtn">Guess</button>
       </div>
       <div class="hint-text">A wrong full-word guess costs one of the 12 guesses</div>
@@ -378,7 +380,7 @@
 </div>
 
 <script>
-const MAX_LETTER_BOXES = 7;
+const MAX_LETTER_BOXES = 10;
 const MAX_GUESSES = 12;
 
 const els = {
@@ -389,6 +391,7 @@ const els = {
   endScreen: document.getElementById('endScreen'),
   wordInputRow: document.getElementById('wordInputRow'),
   setupMeta: document.getElementById('setupMeta'),
+  spellWarning: document.getElementById('spellWarning'),
   confirmWordBtn: document.getElementById('confirmWordBtn'),
   startGuessingBtn: document.getElementById('startGuessingBtn'),
   wordDisplay: document.getElementById('wordDisplay'),
@@ -434,6 +437,7 @@ function onBoxInput(e){
     const next = els.wordInputRow.children[+e.target.dataset.idx + 1];
     if (next) next.focus();
   }
+  els.spellWarning.classList.add('hidden');
   validateSetup();
 }
 function onBoxKeydown(e){
@@ -469,9 +473,44 @@ function validateSetup(){
   }
 }
 
-els.confirmWordBtn.addEventListener('click', ()=>{
+async function checkSpelling(word){
+  // Returns true (valid), false (invalid), or null (couldn't verify — e.g. offline)
+  try {
+    const res = await fetch('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(word.toLowerCase()));
+    if (res.status === 200) return true;
+    if (res.status === 404) return false;
+    return null; // unexpected status — don't block the game over it
+  } catch (err){
+    return null; // offline or request failed — don't block the game over it
+  }
+}
+
+els.confirmWordBtn.addEventListener('click', async ()=>{
   const boxes = [...els.wordInputRow.children];
-  secretWord = boxes.map(b=>b.value).join('').toUpperCase();
+  const word = boxes.map(b=>b.value).join('').toUpperCase();
+
+  els.confirmWordBtn.disabled = true;
+  els.confirmWordBtn.textContent = 'Checking spelling…';
+  els.spellWarning.classList.add('hidden');
+
+  const result = await checkSpelling(word);
+
+  if (result === false){
+    els.spellWarning.textContent = `"${word}" isn't a recognised English word — try another`;
+    els.spellWarning.classList.remove('hidden');
+    els.confirmWordBtn.disabled = false;
+    els.confirmWordBtn.textContent = 'Lock in word';
+    return;
+  }
+
+  if (result === null){
+    els.spellWarning.textContent = 'Couldn\u2019t verify spelling (offline?) — continuing anyway';
+    els.spellWarning.classList.remove('hidden');
+  }
+
+  secretWord = word;
+  els.confirmWordBtn.textContent = 'Lock in word';
+  els.confirmWordBtn.disabled = false;
   els.setupScreen.classList.add('hidden');
   els.handoffScreen.classList.remove('hidden');
 });
@@ -500,9 +539,19 @@ function beginGuessingPhase(){
 
 function renderWord(){
   els.wordDisplay.innerHTML = '';
+  const len = secretWord.length;
+  // shrink slot width / gap / font-size as the word gets longer, so up to 10 letters stays on one line
+  const sizing = {
+    width: len <= 5 ? 34 : len === 6 ? 32 : len === 7 ? 30 : len === 8 ? 27 : len === 9 ? 24 : 21,
+    gap:   len <= 5 ? 8  : len === 6 ? 7  : len === 7 ? 6  : len === 8 ? 5  : len === 9 ? 3  : 2,
+    font:  len <= 5 ? 1.5: len === 6 ? 1.4: len === 7 ? 1.3: len === 8 ? 1.15: len === 9 ? 1.05: 0.95
+  };
+  els.wordDisplay.style.gap = sizing.gap + 'px';
   secretWord.split('').forEach((ch, i)=>{
     const slot = document.createElement('div');
     slot.className = 'word-slot' + (revealed[i] ? ' revealed' : '');
+    slot.style.width = sizing.width + 'px';
+    slot.style.fontSize = sizing.font + 'rem';
     slot.textContent = revealed[i] ? ch : '';
     els.wordDisplay.appendChild(slot);
   });
@@ -617,6 +666,7 @@ els.playAgainBtn.addEventListener('click', ()=>{
   secretWord = '';
   buildWordInputs();
   validateSetup();
+  els.spellWarning.classList.add('hidden');
   els.endScreen.classList.add('hidden');
   els.setupScreen.classList.remove('hidden');
   els.statusRight.innerHTML = '';
