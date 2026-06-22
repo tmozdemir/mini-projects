@@ -193,7 +193,7 @@
   const MAX_SPEED = 250;
   const ACCEL     = 7;
   const BIKE_R    = 11;
-  const HOP_DURATION = 0.42;
+  const HOP_DURATION = 0.52;
   const PATH_HALF_WIDTH = 135;
   const EDGE_FALL = 8;          // small grace past the lip before the drop begins
   const DROP_DURATION = 0.65;   // seconds of falling-off animation before FAIL
@@ -623,16 +623,18 @@
     return true;
   }
 
-  // find a respawn index: at or before the checkpoint, clear of hazards
+  // find a respawn index: at or before the checkpoint, clear of hazards, with run-up room
   function safeRespawnIdx(){
     let idx = checkpointIdx;
     for (let guard=0; guard<trail.samples.length && idx>0; guard++){
       const s = trail.samples[idx];
-      if (isSafeSpot(s.cx, s.cy)) return idx;
+      if (isSafeSpot(s.cx, s.cy)) break;
       idx -= 2;                       // step back ~2 samples at a time
       if (idx < 0) idx = 0;
     }
-    return Math.max(0, idx);
+    // pull back further for a clear run-up to rebuild speed before the hazard
+    idx = Math.max(0, idx - 6);
+    return idx;
   }
 
   function triggerFail(){
@@ -679,7 +681,7 @@
     touch.active=false;
     if (!bike.hopping && !failing){
       bike.hopping=true; bike.hopTimer=0;
-      bike.hopVX=bike.vx*1.15; bike.hopVY=bike.vy*1.15;
+      bike.hopVX=bike.vx*1.3; bike.hopVY=bike.vy*1.3;
     }
   }
   els.touchLayer.addEventListener('pointerdown', pointerDown);
