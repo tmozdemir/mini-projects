@@ -435,13 +435,31 @@
     const pts = def.centre, N = pts.length;
     const samples = [];
     const STEP = 0.06;
-    for (let u=0; u<=N-1+0.0001; u+=STEP){
-      const c = sampleCentre(pts, u);
-      const tg = tangentAt(pts, u);
+    const U_END = N-1;
+    // extend slightly past the end so the cap rounds beyond the flag
+    const U_MAX = U_END + 0.5;
+    for (let u=0; u<=U_MAX+0.0001; u+=STEP){
+      const cu = Math.min(U_END, u);            // clamp centre sampling to the defined path
+      const c = sampleCentre(pts, cu);
+      const tg = tangentAt(pts, cu);
       const nx = -tg.y, ny = tg.x;
-      samples.push({ u, cx:c.x, cy:c.y, nx, ny,
-        lx:c.x+nx*PATH_HALF_WIDTH, ly:c.y+ny*PATH_HALF_WIDTH,
-        rx:c.x-nx*PATH_HALF_WIDTH, ry:c.y-ny*PATH_HALF_WIDTH });
+      // taper the half-width: full until 0.7 from the end, then ease to a rounded nose
+      let hw = PATH_HALF_WIDTH;
+      const distFromEnd = U_END - u;            // >0 before end, <0 past it
+      if (distFromEnd < 0.7){
+        const tt = Math.max(0, (distFromEnd + 0.5) / 1.2);  // 1 at 0.7-before -> 0 at 0.5-past
+        hw = PATH_HALF_WIDTH * Math.sin(Math.max(0,Math.min(1,tt)) * Math.PI/2);
+      }
+      // also extend the centre a touch past the end along the final tangent for the nose
+      let cx=c.x, cy=c.y;
+      if (u > U_END){
+        const over = (u - U_END);
+        cx = c.x + tg.x * over * 160;
+        cy = c.y + tg.y * over * 160;
+      }
+      samples.push({ u:cu, cx, cy, nx, ny, hw,
+        lx:cx+nx*hw, ly:cy+ny*hw,
+        rx:cx-nx*hw, ry:cy-ny*hw });
     }
     const start = sampleCentre(pts, 0);
     const flag  = sampleCentre(pts, N-1);
@@ -504,15 +522,15 @@
           seed: rnd()*1000
         });
       }
-      // distant ledges: just off the edge, lower down
-      if (rnd()<0.4){
-        const off = PATH_HALF_WIDTH*(1.15 + rnd()*0.9)*side;
+      // distant ledges: well clear of the path edge so they never float over it
+      if (rnd()<0.32){
+        const off = PATH_HALF_WIDTH*(1.9 + rnd()*1.3)*side;
         const along = (rnd()-0.5)*120;
         ledges.push({
           x: c.x + nx*off + (-ny)*along,
           y: c.y + ny*off + (nx)*along,
-          rx: 48 + rnd()*54, ry: 24 + rnd()*22,
-          depth: 36 + rnd()*50,
+          rx: 52 + rnd()*48, ry: 26 + rnd()*20,
+          depth: 30 + rnd()*40,
           hasFlowers: rnd()<0.5, hasTree: rnd()<0.4,
           seed: rnd()*1000
         });
@@ -981,7 +999,8 @@
 
     const near = nearestOnPath(bike.x, bike.y);
     if (near.idx > checkpointIdx) checkpointIdx = near.idx;
-    if (!bike.hopping && !dropping && respawnGrace<=0 && Math.abs(near.lateral) > PATH_HALF_WIDTH + EDGE_FALL){
+    const localHW = (near.sample && near.sample.hw) ? near.sample.hw : PATH_HALF_WIDTH;
+    if (!bike.hopping && !dropping && respawnGrace<=0 && Math.abs(near.lateral) > localHW + EDGE_FALL){
       startDrop();
     }
 
@@ -1076,36 +1095,52 @@
     }
   }
 
-  // distant lower green ledge sitting in the void
+  // distant lower terrace sitting down in the void — drawn as a mesa with a
+  // long side wall that fades into the void so it reads as grounded, not floating
   function drawLedge(lg){
     const s=toScreen(lg.x, lg.y);
-    if (s.x<-160||s.x>CANVAS_W+160||s.y<-120||s.y>CANVAS_H+160) return;
-    // side wall dropping down
-    ctx.fillStyle=C.ledgeSide;
+    if (s.x<-180||s.x>CANVAS_W+180||s.y<-140||s.y>CANVAS_H+220) return;
+    const rx=lg.rx, ry=lg.ry;
+    const wallH = lg.depth + 120;           // long wall dropping deep into the void
+
+    // side wall: a tall column under the top ellipse, gradient fading to void colour
+    const g=ctx.createLinearGradient(0, s.y, 0, s.y+wallH);
+    g.addColorStop(0, C.ledgeSide);
+    g.addColorStop(1, C.voidBottom);        // merges into the void at the bottom
+    ctx.fillStyle=g;
     ctx.beginPath();
-    ctx.ellipse(s.x, s.y+lg.depth, lg.rx, lg.ry, 0, 0, Math.PI*2); ctx.fill();
-    ctx.fillRect(s.x-lg.rx, s.y, lg.rx*2, lg.depth);
-    ctx.beginPath(); ctx.ellipse(s.x, s.y, lg.rx, lg.ry, 0, 0, Math.PI, false); ctx.fill();
+    ctx.moveTo(s.x-rx, s.y);
+    ctx.lineTo(s.x-rx, s.y+wallH*0.5);
+    // round the bottom of the column so it tapers into the dark
+    ctx.quadraticCurveTo(s.x, s.y+wallH, s.x+rx, s.y+wallH*0.5);
+    ctx.lineTo(s.x+rx, s.y);
+    ctx.closePath(); ctx.fill();
+    // the front curve of the rim (under-lip shadow)
+    ctx.fillStyle=C.ledgeSide;
+    ctx.beginPath(); ctx.ellipse(s.x, s.y, rx, ry, 0, 0, Math.PI, false); ctx.fill();
+
     // top surface
     ctx.fillStyle=C.ledgeTop;
-    ctx.beginPath(); ctx.ellipse(s.x, s.y, lg.rx, lg.ry, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(s.x, s.y, rx, ry, 0, 0, Math.PI*2); ctx.fill();
+    // soft lighter centre
     ctx.fillStyle=C.ledgeFar;
-    ctx.beginPath(); ctx.ellipse(s.x-lg.rx*0.2, s.y-lg.ry*0.2, lg.rx*0.7, lg.ry*0.6, 0, 0, Math.PI*2); ctx.fill();
-    // tiny props on the ledge
+    ctx.beginPath(); ctx.ellipse(s.x-rx*0.18, s.y-ry*0.18, rx*0.66, ry*0.58, 0, 0, Math.PI*2); ctx.fill();
+
+    // tiny props
     if (lg.hasTree){
-      ctx.fillStyle=C.trunk; ctx.fillRect(s.x+lg.rx*0.3-2, s.y-8, 3, 9);
+      ctx.fillStyle=C.trunk; ctx.fillRect(s.x+rx*0.3-2, s.y-8, 3, 9);
       ctx.fillStyle=C.treeMid;
-      ctx.beginPath(); ctx.ellipse(s.x+lg.rx*0.3, s.y-14, 11, 12, 0,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(s.x+rx*0.3, s.y-14, 10, 11, 0,0,Math.PI*2); ctx.fill();
       ctx.fillStyle=C.treeLight;
-      ctx.beginPath(); ctx.ellipse(s.x+lg.rx*0.3-3, s.y-18, 7, 7, 0,0,Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(s.x+rx*0.3-3, s.y-18, 6, 6, 0,0,Math.PI*2); ctx.fill();
     }
     if (lg.hasFlowers){
       const cols=[C.flowerA,C.flowerB,C.flowerC];
       const rf=(n)=>{ const x=Math.sin(lg.seed*9.3+n*41.7)*23421.6; return x-Math.floor(x); };
       for (let i=0;i<4;i++){
-        const ox=(rf(i)-0.5)*lg.rx*0.8, oy=(rf(i+5)-0.5)*lg.ry*0.7;
+        const ox=(rf(i)-0.5)*rx*0.7, oy=(rf(i+5)-0.5)*ry*0.6;
         ctx.fillStyle=cols[i%3];
-        ctx.beginPath(); ctx.arc(s.x+ox-lg.rx*0.25, s.y+oy, 2.2, 0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(s.x+ox-rx*0.2, s.y+oy, 2, 0,Math.PI*2); ctx.fill();
       }
     }
   }
