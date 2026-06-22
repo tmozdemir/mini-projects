@@ -382,6 +382,7 @@
   let elapsed = 0;
   let rafId = null;
   let failing = false;
+  let respawnGrace = 0;       // brief invulnerability window after a respawn
   let dropping = false;       // mid fall-off-the-edge animation
   let dropTimer = 0;
   let dropVZ = 0;             // virtual downward fall speed for the drop animation
@@ -511,7 +512,7 @@
     trail = buildTrail(def);
     bike.x = trail.start.x; bike.y = trail.start.y;
     bike.vx=0; bike.vy=0; bike.hopping=false; bike.hopTimer=0; bike.hopVX=0; bike.hopVY=0;
-    wheelSpin=0; bikeHeading=-Math.PI/2; dust=[]; checkpointIdx=0; failing=false; dropping=false; dropTimer=0; dropVZ=0;
+    wheelSpin=0; bikeHeading=-Math.PI/2; dust=[]; checkpointIdx=0; failing=false; dropping=false; dropTimer=0; dropVZ=0; respawnGrace=0;
     score=0; combo=1; comboTimer=0; popups=[]; airTime=0;
     stats={ jumps:0, stars:0, airBonus:0, base:0 };
     bike.hopPeak=1;
@@ -609,6 +610,31 @@
     // keep whatever outward momentum the bike had; it'll carry it over the edge
   }
 
+  // is a given world point clear of all hazard patches (water/mud)?
+  function isSafeSpot(wx, wy){
+    for (const sc of trail.scenery){
+      if (sc.type==='water'){
+        const reach = PATH_HALF_WIDTH*sc.w;
+        if (Math.hypot(wx-sc.x, wy-sc.y) < reach*1.15) return false;
+      } else if (sc.type==='mud'){
+        if (Math.hypot(wx-sc.x, wy-sc.y) < sc.r*1.1) return false;
+      }
+    }
+    return true;
+  }
+
+  // find a respawn index: at or before the checkpoint, clear of hazards
+  function safeRespawnIdx(){
+    let idx = checkpointIdx;
+    for (let guard=0; guard<trail.samples.length && idx>0; guard++){
+      const s = trail.samples[idx];
+      if (isSafeSpot(s.cx, s.cy)) return idx;
+      idx -= 2;                       // step back ~2 samples at a time
+      if (idx < 0) idx = 0;
+    }
+    return Math.max(0, idx);
+  }
+
   function triggerFail(){
     if (failing) return;
     failing = true;
@@ -616,13 +642,16 @@
     els.failBanner.classList.add('show');
     setTimeout(()=>{
       els.failBanner.classList.remove('show');
-      const s = trail.samples[checkpointIdx];
+      const idx = safeRespawnIdx();
+      checkpointIdx = idx;            // roll the checkpoint back to the safe spot
+      const s = trail.samples[idx];
       bike.x = s.cx; bike.y = s.cy;
       bike.vx=0; bike.vy=0; bike.hopping=false; bike.hopTimer=0;
       const tg = tangentAt(trail.centre, s.u);
       cam.angle = Math.atan2(tg.y, tg.x) + Math.PI/2;
       cam.x = bike.x; cam.y = bike.y;
       failing = false;
+      respawnGrace = 0.6;
     }, 700);
   }
 
@@ -708,6 +737,7 @@
     }
 
     elapsed += dt;
+    if (respawnGrace > 0) respawnGrace -= dt;
 
     let targetVX=0, targetVY=0;
     if (bike.hopping){
@@ -806,7 +836,7 @@
       if (sc.type==='water'){
         const d = Math.hypot(bike.x-sc.x, bike.y-sc.y);
         const reach = PATH_HALF_WIDTH*sc.w;
-        if (d < reach*0.8 && !bike.hopping && !dropping){
+        if (d < reach*0.8 && !bike.hopping && !dropping && respawnGrace<=0){
           startDrop();   // fell in the water -> fail
         } else if (d < reach && bike.hopping && !sc.scored){
           sc.scored = true;
@@ -856,7 +886,7 @@
 
     const near = nearestOnPath(bike.x, bike.y);
     if (near.idx > checkpointIdx) checkpointIdx = near.idx;
-    if (!bike.hopping && !dropping && Math.abs(near.lateral) > PATH_HALF_WIDTH + EDGE_FALL){
+    if (!bike.hopping && !dropping && respawnGrace<=0 && Math.abs(near.lateral) > PATH_HALF_WIDTH + EDGE_FALL){
       startDrop();
     }
 
