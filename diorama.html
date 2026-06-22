@@ -66,10 +66,24 @@
     position:absolute; top:0; left:0; right:0; z-index:6;
     display:flex; justify-content:space-between; align-items:flex-start; padding:10px 12px; pointer-events:none;
   }
+  .hud-col-left{ display:flex; flex-direction:column; gap:6px; align-items:flex-start; }
+  .hud-col-right{ display:flex; flex-direction:column; gap:6px; align-items:flex-end; }
   .hud-chip{
     background:rgba(13,20,16,0.7); border:1px solid rgba(95,217,122,0.4); border-radius:6px;
     padding:5px 9px; font-size:0.68rem; color:var(--green); letter-spacing:0.04em; font-family:'IBM Plex Mono',monospace;
   }
+  .hud-chip.score{ font-size:0.92rem; font-weight:700; color:var(--amber); border-color:rgba(232,184,74,0.5); min-width:54px; text-align:right; }
+  .hud-combo{
+    background:rgba(232,184,74,0.16); border:1px solid var(--amber); color:var(--amber);
+    border-radius:6px; padding:3px 8px; font-size:0.78rem; font-weight:700; font-family:'IBM Plex Mono',monospace;
+    transition:transform 0.12s ease;
+  }
+  .score-breakdown{
+    font-size:0.74rem; color:var(--dim); line-height:1.8; margin:-6px 0 22px; font-family:'IBM Plex Mono',monospace;
+  }
+  .score-breakdown .row{ display:flex; justify-content:space-between; max-width:230px; margin:0 auto; }
+  .score-breakdown .row.total{ color:var(--amber); font-weight:700; border-top:1px solid var(--line); margin-top:6px; padding-top:6px; }
+  .score-breakdown .row.newbest{ color:var(--green); }
   .quit-btn{
     position:absolute; bottom:10px; left:10px; z-index:6; background:rgba(13,20,16,0.75);
     border:1px solid var(--line); color:var(--dim); font-family:'IBM Plex Mono',monospace;
@@ -136,15 +150,21 @@
       <div class="game-wrap">
         <canvas id="gameCanvas" width="380" height="600"></canvas>
         <div class="hud">
-          <div class="hud-chip" id="timeChip">0.0s</div>
-          <div class="hud-chip" id="bestChip"></div>
+          <div class="hud-col-left">
+            <div class="hud-chip" id="timeChip">0.0s</div>
+            <div class="hud-chip" id="bestChip"></div>
+          </div>
+          <div class="hud-col-right">
+            <div class="hud-chip score" id="scoreChip">0</div>
+            <div class="hud-combo hidden" id="comboChip">x2</div>
+          </div>
         </div>
         <div class="touch-layer" id="touchLayer"></div>
         <button class="quit-btn" id="quitBtn">⏏ Quit</button>
         <div class="fail-banner" id="failBanner">FAIL</div>
         <div class="start-overlay" id="startOverlay">
           <div class="big" id="overlayTitle">Meadow Climb</div>
-          <div class="tip">Touch and hold to grab the reins. Drag the <b>opposite</b> way you want to go, further for more speed. Lift to hop. Stay on the green and reach the flag!</div>
+          <div class="tip">Touch and hold to grab the reins. Drag the <b>opposite</b> way you want to go, further for more speed. Lift to hop. Jump obstacles &amp; grab stars to score &mdash; stay on the green and reach the flag!</div>
           <button class="go-btn" id="goBtn">Touch to Ride</button>
         </div>
       </div>
@@ -154,6 +174,7 @@
       <div class="big-icon">🚩</div>
       <div class="result">FLAG REACHED</div>
       <div class="time" id="finishTime">0.0s</div>
+      <div class="score-breakdown" id="scoreBreakdown"></div>
       <div class="end-row">
         <button class="end-btn ghost" id="endMenuBtn">Menu</button>
         <button class="end-btn primary" id="endNextBtn">Next Trail</button>
@@ -186,50 +207,139 @@
     treeDark:'#2f7d4a', treeMid:'#3f9657', treeLight:'#57b06d', trunk:'#5a3f28',
     coneBody:'#e8622f', coneStripe:'#f4e4d0',
     bikeFrame:'#e8443a', bikeDark:'#1d2b22', skin:'#f0c089',
-    flagPole:'#23332b', flagCloth:'#ff5d5d'
+    flagPole:'#23332b', flagCloth:'#ff5d5d',
+    mud:'#6b4f33', mudDark:'#523c26', mudSheen:'#7d5d3d',
+    water:'#3a8fb0', waterDark:'#2a6d8a', waterEdge:'#1f5168',
+    rampBody:'#c98a3a', rampDark:'#a86f28', rampStripe:'#f4e4d0',
+    logBody:'#7a5230', logDark:'#5a3a22', logRing:'#9a6a40',
+    star:'#ffd84a', starEdge:'#e8a82a',
+    flowerA:'#f06fae', flowerB:'#f4d24a', flowerC:'#9d6ff0', grassBlade:'#3f9657'
   };
 
-  /* ======================= TRAILS ======================= */
+  /* ======================= TRAILS =======================
+     scenery types:
+       tree, boulder      - solid scenery (collision, nudges you)
+       cones              - row of cones (soft, jump to score)
+       log                - jumpable obstacle across path (jump = points; clip = stumble)
+       mud                - slows you unless you jump it (forgiving hazard)
+       water              - pit/gap: jump it or FAIL (punishing hazard)
+       ramp               - launches a bigger auto-hop (style/airtime points)
+       star               - collectable pickup (points; lifts on a small float)
+       flowers, grass     - pure decoration
+  */
   const TRAILS = [
     {
       id:1, name:'Meadow Climb',
       centre:[
-        [190,2000],[205,1820],[180,1640],[195,1460],[230,1300],
-        [215,1120],[180,980],[200,820],[240,680],[220,520],[195,380],[210,230]
+        [190,3000],[205,2820],[180,2640],[195,2460],[230,2300],
+        [215,2120],[180,1980],[200,1820],[240,1680],[220,1520],
+        [195,1380],[215,1220],[185,1060],[205,900],[235,740],
+        [210,560],[190,400],[205,230]
       ],
       scenery:[
-        {type:'cones', t:0.16, n:5},
-        {type:'boulder', t:0.24, lat:-0.1, r:34},
-        {type:'tree', t:0.30, lat:-0.7},
-        {type:'tree', t:0.31, lat:0.7},
-        {type:'cones', t:0.40, n:5},
-        {type:'boulder', t:0.48, lat:0.15, r:30},
-        {type:'tree', t:0.55, lat:-0.6},
-        {type:'cones', t:0.63, n:5},
-        {type:'boulder', t:0.72, lat:-0.2, r:36},
-        {type:'tree', t:0.80, lat:0.6},
-        {type:'cones', t:0.86, n:5}
+        {type:'grass', t:0.05, lat:-0.8},{type:'flowers', t:0.07, lat:0.7},
+        {type:'log', t:0.11, lat:0},
+        {type:'star', t:0.12, lat:0},
+        {type:'tree', t:0.15, lat:-0.8},{type:'flowers', t:0.16, lat:0.8},
+        {type:'cones', t:0.20, n:5},
+        {type:'mud', t:0.25, lat:0.0, r:42},
+        {type:'star', t:0.27, lat:-0.3},{type:'star', t:0.28, lat:0.3},
+        {type:'boulder', t:0.32, lat:-0.55, r:32},{type:'grass', t:0.33, lat:0.7},
+        {type:'log', t:0.37, lat:0},
+        {type:'star', t:0.38, lat:0},
+        {type:'tree', t:0.42, lat:0.7},{type:'flowers', t:0.44, lat:-0.7},
+        {type:'water', t:0.48, w:0.55},
+        {type:'star', t:0.49, lat:0},
+        {type:'cones', t:0.54, n:6},
+        {type:'ramp', t:0.58, lat:0},
+        {type:'star', t:0.60, lat:0, hi:1},{type:'star', t:0.615, lat:0, hi:1},
+        {type:'boulder', t:0.65, lat:0.5, r:34},{type:'grass', t:0.66, lat:-0.8},
+        {type:'mud', t:0.70, lat:0, r:44},
+        {type:'tree', t:0.74, lat:-0.75},{type:'flowers', t:0.75, lat:0.7},
+        {type:'log', t:0.79, lat:0},
+        {type:'star', t:0.80, lat:0},
+        {type:'cones', t:0.84, n:6},
+        {type:'water', t:0.88, w:0.5},
+        {type:'star', t:0.89, lat:0},
+        {type:'tree', t:0.93, lat:0.7},{type:'flowers', t:0.94, lat:-0.7}
       ]
     },
     {
       id:2, name:'Switchbacks',
       centre:[
-        [190,2200],[165,2020],[215,1880],[250,1700],[205,1560],[160,1420],
-        [200,1260],[250,1140],[215,980],[165,840],[215,700],[250,560],[210,420],[190,250]
+        [190,3200],[160,3020],[215,2880],[255,2700],[205,2560],[155,2420],
+        [205,2260],[255,2140],[210,1980],[160,1840],[215,1700],[255,1560],
+        [205,1420],[165,1280],[215,1120],[250,980],[205,840],[170,700],
+        [215,560],[245,420],[200,250]
       ],
       scenery:[
-        {type:'cones', t:0.12, n:5},
-        {type:'tree', t:0.18, lat:-0.7},
-        {type:'boulder', t:0.22, lat:0.2, r:32},
-        {type:'cones', t:0.30, n:5},
-        {type:'boulder', t:0.37, lat:-0.15, r:36},
-        {type:'tree', t:0.44, lat:0.7},
-        {type:'cones', t:0.50, n:5},
-        {type:'boulder', t:0.58, lat:0.1, r:30},
-        {type:'tree', t:0.64, lat:-0.6},
-        {type:'cones', t:0.72, n:5},
-        {type:'boulder', t:0.80, lat:-0.2, r:34},
-        {type:'cones', t:0.88, n:5}
+        {type:'grass', t:0.04, lat:-0.7},{type:'flowers', t:0.06, lat:0.7},
+        {type:'cones', t:0.09, n:5},
+        {type:'log', t:0.13, lat:0},
+        {type:'star', t:0.14, lat:0},
+        {type:'tree', t:0.17, lat:-0.75},
+        {type:'mud', t:0.21, lat:0, r:42},
+        {type:'star', t:0.23, lat:-0.3},{type:'star', t:0.235, lat:0.3},
+        {type:'boulder', t:0.27, lat:0.5, r:34},{type:'flowers', t:0.28, lat:-0.7},
+        {type:'water', t:0.32, w:0.55},
+        {type:'star', t:0.33, lat:0},
+        {type:'ramp', t:0.37, lat:0},
+        {type:'star', t:0.39, lat:0, hi:1},{type:'star', t:0.405, lat:0, hi:1},
+        {type:'cones', t:0.44, n:6},
+        {type:'log', t:0.48, lat:0},
+        {type:'star', t:0.49, lat:0},
+        {type:'tree', t:0.52, lat:0.7},{type:'grass', t:0.53, lat:-0.7},
+        {type:'mud', t:0.57, lat:0, r:44},
+        {type:'boulder', t:0.61, lat:-0.5, r:32},
+        {type:'water', t:0.65, w:0.6},
+        {type:'star', t:0.66, lat:0},
+        {type:'cones', t:0.70, n:6},
+        {type:'log', t:0.74, lat:0},
+        {type:'star', t:0.75, lat:0},
+        {type:'ramp', t:0.79, lat:0},
+        {type:'star', t:0.81, lat:0, hi:1},{type:'star', t:0.825, lat:0, hi:1},
+        {type:'tree', t:0.86, lat:-0.7},{type:'flowers', t:0.87, lat:0.7},
+        {type:'mud', t:0.91, lat:0, r:42},
+        {type:'flowers', t:0.95, lat:-0.6}
+      ]
+    },
+    {
+      id:3, name:'River Run',
+      centre:[
+        [200,3400],[225,3220],[195,3040],[210,2860],[245,2700],[215,2540],
+        [180,2380],[210,2220],[250,2060],[220,1900],[185,1740],[215,1580],
+        [250,1420],[210,1260],[175,1100],[215,940],[250,800],[215,640],
+        [190,480],[210,300],[200,180]
+      ],
+      scenery:[
+        {type:'flowers', t:0.04, lat:-0.7},{type:'grass', t:0.05, lat:0.7},
+        {type:'log', t:0.09, lat:0},
+        {type:'star', t:0.10, lat:0},
+        {type:'water', t:0.14, w:0.5},
+        {type:'star', t:0.15, lat:0},
+        {type:'tree', t:0.18, lat:-0.75},{type:'flowers', t:0.19, lat:0.7},
+        {type:'mud', t:0.23, lat:0, r:44},
+        {type:'cones', t:0.27, n:6},
+        {type:'ramp', t:0.31, lat:0},
+        {type:'star', t:0.33, lat:0, hi:1},{type:'star', t:0.345, lat:0, hi:1},{type:'star', t:0.36, lat:0, hi:1},
+        {type:'water', t:0.40, w:0.62},
+        {type:'star', t:0.41, lat:0},
+        {type:'boulder', t:0.45, lat:0.55, r:34},{type:'tree', t:0.46, lat:-0.7},
+        {type:'log', t:0.50, lat:0},
+        {type:'star', t:0.51, lat:0},
+        {type:'mud', t:0.55, lat:0, r:46},
+        {type:'cones', t:0.59, n:7},
+        {type:'water', t:0.63, w:0.6},
+        {type:'star', t:0.64, lat:0},
+        {type:'ramp', t:0.68, lat:0},
+        {type:'star', t:0.70, lat:0, hi:1},{type:'star', t:0.715, lat:0, hi:1},
+        {type:'tree', t:0.74, lat:0.7},{type:'flowers', t:0.75, lat:-0.7},
+        {type:'log', t:0.79, lat:0},
+        {type:'star', t:0.80, lat:0},
+        {type:'water', t:0.84, w:0.55},
+        {type:'mud', t:0.88, lat:0, r:44},
+        {type:'cones', t:0.92, n:6},
+        {type:'flowers', t:0.96, lat:0.6}
       ]
     }
   ];
@@ -245,6 +355,9 @@
     touchLayer: document.getElementById('touchLayer'),
     timeChip: document.getElementById('timeChip'),
     bestChip: document.getElementById('bestChip'),
+    scoreChip: document.getElementById('scoreChip'),
+    comboChip: document.getElementById('comboChip'),
+    scoreBreakdown: document.getElementById('scoreBreakdown'),
     failBanner: document.getElementById('failBanner'),
     startOverlay: document.getElementById('startOverlay'),
     overlayTitle: document.getElementById('overlayTitle'),
@@ -256,7 +369,7 @@
   };
   const ctx = els.canvas.getContext('2d');
 
-  const PROGRESS_KEY = 'opentrail_v2_progress';
+  const PROGRESS_KEY = 'opentrail_v3_progress';
   function loadProgress(){
     try { return JSON.parse(localStorage.getItem(PROGRESS_KEY)) || {unlocked:1, best:{}}; }
     catch(e){ return {unlocked:1, best:{}}; }
@@ -274,7 +387,17 @@
   let dropVZ = 0;             // virtual downward fall speed for the drop animation
   let checkpointIdx = 0;
 
-  const bike = { x:0, y:0, vx:0, vy:0, hopTimer:0, hopping:false, hopVX:0, hopVY:0 };
+  // scoring
+  let score = 0;
+  let combo = 1;
+  let comboTimer = 0;          // time left to keep the combo alive
+  const COMBO_WINDOW = 2.2;    // seconds
+  let popups = [];             // floating score text
+  let airTime = 0;             // accumulates while airborne for airtime bonus
+  let startScore = 0;          // (unused placeholder for future)
+  let stats = { jumps:0, stars:0, airBonus:0, base:0 };
+
+  const bike = { x:0, y:0, vx:0, vy:0, hopTimer:0, hopping:false, hopVX:0, hopVY:0, hopPeak:1 };
   let wheelSpin = 0;
   let bikeHeading = -Math.PI/2;   // smoothed travel heading in screen space (-PI/2 = up/away)
   const cam = { x:0, y:0, angle:0 };
@@ -324,10 +447,24 @@
           const f=(k/(count-1))*2-1;
           cones.push({ x:c.x+nx*f*PATH_HALF_WIDTH*0.82, y:c.y+ny*f*PATH_HALF_WIDTH*0.82 });
         }
-        return {type:'cones', cones, y:c.y};
-      } else {
+        return {type:'cones', cones, y:c.y, u, scored:false};
+      } else if (sc.type==='water' || sc.type==='mud'){
+        // span across the path; w = fraction of half-width covered (water), r = radius (mud)
+        return { type:sc.type, x:c.x, y:c.y, u, nx, ny,
+                 w:(sc.w||0.6), r:(sc.r||42), scored:false, hitThisPass:false };
+      } else if (sc.type==='ramp' || sc.type==='log'){
         const lat=sc.lat||0;
-        return { type:sc.type, x:c.x+nx*lat*PATH_HALF_WIDTH*0.7, y:c.y+ny*lat*PATH_HALF_WIDTH*0.7, r:sc.r||30 };
+        return { type:sc.type, x:c.x+nx*lat*PATH_HALF_WIDTH*0.7, y:c.y+ny*lat*PATH_HALF_WIDTH*0.7,
+                 u, nx, ny, scored:false, used:false };
+      } else if (sc.type==='star'){
+        const lat=sc.lat||0;
+        return { type:'star', x:c.x+nx*lat*PATH_HALF_WIDTH*0.55, y:c.y+ny*lat*PATH_HALF_WIDTH*0.55,
+                 u, collected:false, hi:sc.hi?1:0, phase:Math.random()*Math.PI*2 };
+      } else {
+        // tree, boulder, flowers, grass
+        const lat=sc.lat||0;
+        return { type:sc.type, x:c.x+nx*lat*PATH_HALF_WIDTH*0.82, y:c.y+ny*lat*PATH_HALF_WIDTH*0.82,
+                 u, r:sc.r||30, seed:Math.random()*1000 };
       }
     });
     return { samples, scenery, start, flag, name:def.name, id:def.id, centre:pts, N };
@@ -358,7 +495,7 @@
         <div class="meta">
           <div class="name">${tr.name}</div>
           <div class="theme">winding trail</div>
-          ${best ? `<div class="best">Best: ${best.toFixed(1)}s</div>` : ''}
+          ${best ? `<div class="best">Best: ${best} pts</div>` : ''}
         </div>
         <div class="arrow">▶</div>
       `;
@@ -375,6 +512,9 @@
     bike.x = trail.start.x; bike.y = trail.start.y;
     bike.vx=0; bike.vy=0; bike.hopping=false; bike.hopTimer=0; bike.hopVX=0; bike.hopVY=0;
     wheelSpin=0; bikeHeading=-Math.PI/2; dust=[]; checkpointIdx=0; failing=false; dropping=false; dropTimer=0; dropVZ=0;
+    score=0; combo=1; comboTimer=0; popups=[]; airTime=0;
+    stats={ jumps:0, stars:0, airBonus:0, base:0 };
+    bike.hopPeak=1;
     const tg = tangentAt(trail.centre, 0);
     cam.angle = Math.atan2(tg.y, tg.x) + Math.PI/2;
     cam.x = bike.x; cam.y = bike.y;
@@ -383,12 +523,14 @@
     els.overlayTitle.textContent = trail.name;
     els.startOverlay.classList.remove('hidden');
     els.failBanner.classList.remove('show');
+    els.comboChip.classList.add('hidden');
+    els.scoreChip.textContent = '0';
     els.selectScreen.classList.add('hidden');
     els.endScreen.classList.add('hidden');
     els.gameScreen.classList.remove('hidden');
     els.statusRight.textContent = trail.name.toUpperCase();
     const best = progress.best[trail.id];
-    els.bestChip.textContent = best ? ('best ' + best.toFixed(1) + 's') : '';
+    els.bestChip.textContent = best ? ('best ' + best + 'pts') : '';
 
     running = true;
     if (!rafId) loop(performance.now());
@@ -406,14 +548,56 @@
 
   function completeTrail(){
     running=false;
-    const t = elapsed;
-    if (!progress.best[trail.id] || t < progress.best[trail.id]) progress.best[trail.id]=t;
+    // finish bonus: faster = more, plus the accumulated score
+    const timeBonus = Math.max(50, Math.round(600 - elapsed*12));
+    score += timeBonus;
+    const isBest = !progress.best[trail.id] || score > progress.best[trail.id];
+    if (isBest) progress.best[trail.id]=score;
     if (progress.unlocked===trail.id && trail.id<TRAILS.length) progress.unlocked=trail.id+1;
     saveProgress(progress);
-    els.finishTime.textContent = t.toFixed(1)+'s';
+
+    els.finishTime.textContent = score + ' pts';
+    els.scoreBreakdown.innerHTML =
+      `<div class="row"><span>Obstacles jumped</span><span>${stats.jumps}</span></div>`+
+      `<div class="row"><span>Stars collected</span><span>${stats.stars}</span></div>`+
+      `<div class="row"><span>Airtime bonus</span><span>${stats.airBonus}</span></div>`+
+      `<div class="row"><span>Finish bonus</span><span>${timeBonus}</span></div>`+
+      `<div class="row"><span>Time</span><span>${elapsed.toFixed(1)}s</span></div>`+
+      `<div class="row total"><span>Total</span><span>${score}</span></div>`+
+      (isBest?`<div class="row newbest"><span></span><span>★ New best!</span></div>`:
+        `<div class="row"><span>Best</span><span>${progress.best[trail.id]}</span></div>`);
     els.endNextBtn.classList.toggle('hidden', trail.id>=TRAILS.length);
     els.gameScreen.classList.add('hidden');
     els.endScreen.classList.remove('hidden');
+  }
+
+  /* ======================= SCORING ======================= */
+  function addScore(amount, label, wx, wy, category){
+    const pts = Math.round(amount * combo);
+    score += pts;
+    if (category && stats[category] !== undefined) stats[category] += pts;
+    // bump combo
+    combo = Math.min(8, combo + 1);
+    comboTimer = COMBO_WINDOW;
+    // floating popup at the bike's screen position (or given world pos)
+    const sp = (wx!==undefined) ? toScreen(wx,wy) : toScreen(bike.x,bike.y);
+    popups.push({ x:sp.x, y:sp.y-20, vy:-34, life:1.0, text:(label?label+' ':'')+'+'+pts, big:combo>=4 });
+    updateScoreHud();
+  }
+  function updateScoreHud(){
+    els.scoreChip.textContent = score;
+    if (combo>1){
+      els.comboChip.textContent = 'x'+combo;
+      els.comboChip.classList.remove('hidden');
+      els.comboChip.style.transform='scale(1.18)';
+      setTimeout(()=>{ els.comboChip.style.transform='scale(1)'; }, 110);
+    } else {
+      els.comboChip.classList.add('hidden');
+    }
+  }
+  function breakCombo(){
+    combo = 1; comboTimer = 0;
+    els.comboChip.classList.add('hidden');
   }
 
   function startDrop(){
@@ -569,16 +753,106 @@
     dust.forEach(d=> d.life-=dt);
     dust = dust.filter(d=>d.life>0);
 
+    // combo decay
+    if (comboTimer > 0){
+      comboTimer -= dt;
+      if (comboTimer <= 0) breakCombo();
+    }
+
+    // hop timer + airtime accumulation
     if (bike.hopping){
       bike.hopTimer+=dt;
-      if (bike.hopTimer>=HOP_DURATION) bike.hopping=false;
+      airTime += dt;
+      if (bike.hopTimer>=HOP_DURATION){
+        bike.hopping=false;
+        // award airtime bonus on landing if it was a decent hop
+        if (airTime > 0.18){
+          const bonus = Math.round(airTime*120) * bike.hopPeak;
+          addScore(bonus, 'Airtime', bike.x, bike.y, 'airBonus');
+        }
+        airTime = 0; bike.hopPeak = 1;
+      }
     } else {
+      // grounded: solid scenery nudges you
       trail.scenery.forEach(sc=>{
         if (sc.type==='boulder') resolveCircle(sc.x, sc.y, sc.r);
         else if (sc.type==='tree') resolveCircle(sc.x, sc.y, 16);
-        else if (sc.type==='cones'){ sc.cones.forEach(c=> resolveCircle(c.x, c.y, 8)); }
       });
     }
+
+    // ---- interactions with scenery (hazards, jumpable obstacles, pickups) ----
+    trail.scenery.forEach(sc=>{
+      if (sc.type==='star'){
+        if (!sc.collected){
+          const lift = sc.hi ? 0 : 0; // (hi stars float higher, handled in render)
+          const d = Math.hypot(bike.x-sc.x, bike.y-sc.y);
+          // hi stars require being airborne to grab (reward for ramp jumps)
+          const grabbable = sc.hi ? bike.hopping : true;
+          if (d < 26 && grabbable){
+            sc.collected = true;
+            addScore(sc.hi?40:20, sc.hi?'Air star':'Star', sc.x, sc.y, 'stars');
+          }
+        }
+        return;
+      }
+      if (sc.type==='mud'){
+        const d = Math.hypot(bike.x-sc.x, bike.y-sc.y);
+        if (d < sc.r && !bike.hopping){
+          bike.vx *= 0.90; bike.vy *= 0.90;   // bog down
+          if (!sc.hitThisPass){ sc.hitThisPass=true; breakCombo(); }
+        } else if (d > sc.r*1.4){ sc.hitThisPass=false; }
+        return;
+      }
+      if (sc.type==='water'){
+        const d = Math.hypot(bike.x-sc.x, bike.y-sc.y);
+        const reach = PATH_HALF_WIDTH*sc.w;
+        if (d < reach*0.8 && !bike.hopping && !dropping){
+          startDrop();   // fell in the water -> fail
+        } else if (d < reach && bike.hopping && !sc.scored){
+          sc.scored = true;
+          addScore(35, 'Gap jump', sc.x, sc.y, 'jumps'); stats.jumps++;
+        }
+        return;
+      }
+      if (sc.type==='log'){
+        const d = Math.hypot(bike.x-sc.x, bike.y-sc.y);
+        if (d < 22){
+          if (bike.hopping && !sc.scored){
+            sc.scored = true;
+            addScore(30, 'Jump', sc.x, sc.y, 'jumps'); stats.jumps++;
+          } else if (!bike.hopping && !sc.used){
+            sc.used = true;            // clipped it: stumble + lose combo
+            bike.vx *= 0.5; bike.vy *= 0.5; breakCombo();
+          }
+        } else if (d > 40){ sc.used=false; }
+        return;
+      }
+      if (sc.type==='cones'){
+        const d = Math.hypot(bike.x-sc.x, bike.y-sc.y);
+        if (d < 40 && bike.hopping && !sc.scored){
+          sc.scored = true;
+          addScore(15, 'Cones', sc.x, sc.y, 'jumps'); stats.jumps++;
+        } else if (d < 30 && !bike.hopping){
+          sc.cones.forEach(c=> resolveCircle(c.x, c.y, 8));
+        }
+        return;
+      }
+      if (sc.type==='ramp'){
+        const d = Math.hypot(bike.x-sc.x, bike.y-sc.y);
+        if (d < 24 && !bike.hopping && !sc.used){
+          sc.used = true;
+          // auto-launch a big hop carrying momentum
+          bike.hopping=true; bike.hopTimer=0; airTime=0;
+          bike.hopVX=bike.vx*1.2; bike.hopVY=bike.vy*1.2; bike.hopPeak=2;
+          addScore(25, 'Ramp!', sc.x, sc.y, 'jumps'); stats.jumps++;
+        } else if (d > 48){ sc.used=false; }
+        return;
+      }
+    });
+
+    // update floating popups
+    popups.forEach(p=>{ p.y += p.vy*dt; p.vy *= 0.9; p.life -= dt*1.4; });
+    popups = popups.filter(p=>p.life>0);
 
     const near = nearestOnPath(bike.x, bike.y);
     if (near.idx > checkpointIdx) checkpointIdx = near.idx;
@@ -690,6 +964,144 @@
     ctx.closePath(); ctx.fill();
     ctx.fillStyle=C.coneStripe;
     ctx.fillRect(s.x-4.2, s.y-5, 8.4, 3);
+  }
+
+  // flat patch lying on the path, spanning across it (oriented to path normal)
+  function pathPatchPolygon(sc, halfSpan, alongLen){
+    // corners in world space, then project
+    const nx=sc.nx, ny=sc.ny;          // across-path normal
+    const tx=-ny, ty=nx;               // along-path
+    const pts=[
+      [sc.x + nx*halfSpan + tx*alongLen, sc.y + ny*halfSpan + ty*alongLen],
+      [sc.x - nx*halfSpan + tx*alongLen, sc.y - ny*halfSpan + ty*alongLen],
+      [sc.x - nx*halfSpan - tx*alongLen, sc.y - ny*halfSpan - ty*alongLen],
+      [sc.x + nx*halfSpan - tx*alongLen, sc.y + ny*halfSpan - ty*alongLen]
+    ].map(p=>toScreen(p[0],p[1]));
+    return pts;
+  }
+
+  function drawWater(sc){
+    const span = PATH_HALF_WIDTH*sc.w;
+    const pts = pathPatchPolygon(sc, span, 30);
+    ctx.fillStyle=C.waterEdge;
+    ctx.beginPath(); pts.forEach((p,i)=> i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.closePath(); ctx.fill();
+    // inner water, slightly inset
+    const inner = pathPatchPolygon(sc, span*0.86, 24);
+    ctx.fillStyle=C.water;
+    ctx.beginPath(); inner.forEach((p,i)=> i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.closePath(); ctx.fill();
+    // sheen line
+    ctx.strokeStyle='rgba(255,255,255,0.35)'; ctx.lineWidth=2;
+    const mid=toScreen(sc.x,sc.y);
+    ctx.beginPath(); ctx.ellipse(mid.x,mid.y,span*0.5,5,0,0.2,2.4); ctx.stroke();
+  }
+
+  function drawMud(sc){
+    const mid=toScreen(sc.x,sc.y);
+    ctx.fillStyle=C.mudDark;
+    ctx.beginPath(); ctx.ellipse(mid.x,mid.y+1, sc.r*0.95, sc.r*0.5, 0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=C.mud;
+    ctx.beginPath(); ctx.ellipse(mid.x,mid.y, sc.r*0.82, sc.r*0.42, 0,0,Math.PI*2); ctx.fill();
+    // wet sheen blobs
+    ctx.fillStyle=C.mudSheen;
+    ctx.beginPath(); ctx.ellipse(mid.x-sc.r*0.25,mid.y-sc.r*0.08, sc.r*0.22, sc.r*0.10, 0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(mid.x+sc.r*0.3,mid.y+sc.r*0.07, sc.r*0.16, sc.r*0.08, 0,0,Math.PI*2); ctx.fill();
+  }
+
+  function drawRamp(sc){
+    // a wedge sitting across the path; draw as a trapezoid with a lighter kicker face
+    const pts = pathPatchPolygon(sc, 34, 16);
+    ctx.fillStyle=C.rampDark;
+    ctx.beginPath(); pts.forEach((p,i)=> i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y)); ctx.closePath(); ctx.fill();
+    const mid=toScreen(sc.x,sc.y);
+    // raised kicker
+    ctx.fillStyle=C.rampBody;
+    ctx.beginPath(); ctx.moveTo(mid.x-30,mid.y+6); ctx.lineTo(mid.x+30,mid.y+6);
+    ctx.lineTo(mid.x+20,mid.y-14); ctx.lineTo(mid.x-20,mid.y-14); ctx.closePath(); ctx.fill();
+    // chevrons
+    ctx.fillStyle=C.rampStripe;
+    for (let i=-1;i<=1;i++){
+      ctx.beginPath();
+      ctx.moveTo(mid.x+i*13-4,mid.y-2); ctx.lineTo(mid.x+i*13+4,mid.y-2); ctx.lineTo(mid.x+i*13,mid.y-9);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+
+  function drawLog(sc){
+    const s=toScreen(sc.x,sc.y);
+    drawShadow({x:s.x,y:s.y+4}, 30, 8);
+    // barrel across the path
+    ctx.fillStyle=C.logBody;
+    ctx.beginPath(); ctx.ellipse(s.x,s.y-4, 32, 12, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle=C.logDark;
+    ctx.beginPath(); ctx.ellipse(s.x,s.y-4, 32, 12, 0, 0, Math.PI); ctx.fill();
+    // end ring
+    ctx.fillStyle=C.logRing;
+    ctx.beginPath(); ctx.ellipse(s.x-30,s.y-4, 5, 11, 0, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle=C.logDark; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.ellipse(s.x-30,s.y-4, 2.4, 6, 0, 0, Math.PI*2); ctx.stroke();
+  }
+
+  function drawStar(sc){
+    const s=toScreen(sc.x,sc.y);
+    const t = performance.now()/1000;
+    const bob = Math.sin(t*3 + sc.phase)*3;
+    const floatY = sc.hi ? -26 : -14;     // hi stars hover higher (need a jump)
+    const cx=s.x, cy=s.y+floatY+bob;
+    const spin = t*2 + sc.phase;
+    drawShadow({x:s.x,y:s.y+2}, 7, 3);
+    ctx.save();
+    ctx.translate(cx,cy); ctx.rotate(spin*0.3);
+    ctx.fillStyle=C.star; ctx.strokeStyle=C.starEdge; ctx.lineWidth=1.5;
+    ctx.beginPath();
+    for (let i=0;i<5;i++){
+      const a=-Math.PI/2 + i*2*Math.PI/5;
+      const a2=a+Math.PI/5;
+      ctx.lineTo(Math.cos(a)*8, Math.sin(a)*8);
+      ctx.lineTo(Math.cos(a2)*3.6, Math.sin(a2)*3.6);
+    }
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawFlowers(sc){
+    const s=toScreen(sc.x,sc.y);
+    const cols=[C.flowerA,C.flowerB,C.flowerC];
+    const rnd=(n)=>{ const x=Math.sin(sc.seed*12.9+n*78.2)*43758.5; return x-Math.floor(x); };
+    for (let i=0;i<5;i++){
+      const ox=(rnd(i)-0.5)*26, oy=(rnd(i+9)-0.5)*12;
+      ctx.fillStyle='#3f9657';
+      ctx.fillRect(s.x+ox-0.6, s.y+oy, 1.4, 5);
+      ctx.fillStyle=cols[i%3];
+      ctx.beginPath(); ctx.arc(s.x+ox, s.y+oy, 2.6, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle='#fff7d8';
+      ctx.beginPath(); ctx.arc(s.x+ox, s.y+oy, 1, 0, Math.PI*2); ctx.fill();
+    }
+  }
+
+  function drawGrassTuft(sc){
+    const s=toScreen(sc.x,sc.y);
+    const rnd=(n)=>{ const x=Math.sin(sc.seed*7.1+n*51.3)*23421.6; return x-Math.floor(x); };
+    ctx.strokeStyle=C.grassBlade; ctx.lineWidth=1.6; ctx.lineCap='round';
+    for (let i=0;i<7;i++){
+      const ox=(rnd(i)-0.5)*22;
+      const lean=(rnd(i+4)-0.5)*6;
+      ctx.beginPath(); ctx.moveTo(s.x+ox, s.y+2); ctx.quadraticCurveTo(s.x+ox+lean, s.y-4, s.x+ox+lean*1.6, s.y-9); ctx.stroke();
+    }
+  }
+
+  function drawPopups(){
+    popups.forEach(p=>{
+      const a=Math.max(0,Math.min(1,p.life));
+      ctx.globalAlpha=a;
+      ctx.font=(p.big?'700 16px':'700 13px')+" 'IBM Plex Mono', monospace";
+      ctx.textAlign='center';
+      ctx.lineWidth=3; ctx.strokeStyle='rgba(13,20,16,0.8)';
+      ctx.strokeText(p.text, p.x, p.y);
+      ctx.fillStyle=p.big?'#ffd84a':'#7dffa0';
+      ctx.fillText(p.text, p.x, p.y);
+      ctx.globalAlpha=1;
+    });
+    ctx.textAlign='start';
   }
 
   function drawFlag(){
@@ -847,6 +1259,14 @@
   function render(){
     drawSky();
     drawRibbon();
+    // flat ground decals (lie on the path surface) drawn before upright objects
+    trail.scenery.forEach(sc=>{
+      if (sc.type==='water') drawWater(sc);
+      else if (sc.type==='mud') drawMud(sc);
+      else if (sc.type==='ramp') drawRamp(sc);
+      else if (sc.type==='flowers') drawFlowers(sc);
+      else if (sc.type==='grass') drawGrassTuft(sc);
+    });
     drawDust();
     const ents=[];
     // sort key is each object's SCREEN y after projection, so layering respects the
@@ -855,11 +1275,14 @@
       if (sc.type==='cones') sc.cones.forEach(c=> ents.push({sy:toScreen(c.x,c.y).y, draw:()=>drawCone(c)}));
       else if (sc.type==='boulder') ents.push({sy:toScreen(sc.x,sc.y).y, draw:()=>drawBoulder(sc)});
       else if (sc.type==='tree') ents.push({sy:toScreen(sc.x,sc.y).y, draw:()=>drawTree(sc)});
+      else if (sc.type==='log') ents.push({sy:toScreen(sc.x,sc.y).y, draw:()=>drawLog(sc)});
+      else if (sc.type==='star' && !sc.collected) ents.push({sy:toScreen(sc.x,sc.y).y, draw:()=>drawStar(sc)});
     });
     ents.push({sy:toScreen(trail.flag.x,trail.flag.y).y, draw:drawFlag});
     ents.push({sy: dropping ? 99999 : toScreen(bike.x,bike.y).y, draw:drawBike});
     ents.sort((a,b)=> a.sy - b.sy);
     ents.forEach(e=> e.draw());
+    drawPopups();
   }
 
   /* ======================= LOOP ======================= */
