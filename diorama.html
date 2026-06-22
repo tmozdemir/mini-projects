@@ -206,8 +206,8 @@
     // deep extruded cliff faces under the path + the void it drops into
     cliffLight:'#1a6e5e', cliffMid:'#145447', cliffDark:'#0e3d34', cliffEdge:'#0a2e28',
     voidTop:'#123f3a', voidBottom:'#0c2b29',
-    // distant lower ledges (sit in the void, slightly desaturated greens)
-    ledgeTop:'#239e84', ledgeSide:'#15614f', ledgeFar:'#1f8a73',
+    // distant lower ledges (sit in the void, muted/darker greens so they recede)
+    ledgeTop:'#1d7a66', ledgeSide:'#10543f', ledgeFar:'#23866f',
     // faceted background rock formations
     rockTopLit:'#5f8a86', rockTop:'#4e7773', rockSide:'#3a5f5c', rockDark:'#2c4a48',
     cloud:'#ffffff', cloudShade:'#dcefe9',
@@ -531,6 +531,32 @@
         y: c.y + ny*off + (nx)*along,
         scale: 0.55 + rnd()*0.8,
         seed: rnd()*1000
+      });
+    }
+
+    // ---- finish backdrop: a wall of faceted rocks rising behind the flag, like WTG ----
+    // 'beyond' = direction past the flag along the path tangent (toward smaller y / up)
+    const endTg = tangentAt(pts, N-1);
+    const bnx=-endTg.y, bny=endTg.x;
+    for (let k=0; k<9; k++){
+      const spread = (k/8 - 0.5);                 // -0.5..0.5 across the path
+      const beyond = 80 + rnd()*120;              // distance past the flag
+      rocks.push({
+        x: flag.x + endTg.x*beyond + bnx*spread*PATH_HALF_WIDTH*2.4,
+        y: flag.y + endTg.y*beyond + bny*spread*PATH_HALF_WIDTH*2.4,
+        size: 34 + rnd()*40,
+        h: 60 + rnd()*90,        // tall, so they rise as a backdrop
+        facets: 4 + Math.floor(rnd()*3),
+        seed: rnd()*1000
+      });
+    }
+    // a few clouds hugging the flag backdrop too
+    for (let k=0; k<5; k++){
+      const beyond = 40 + rnd()*160;
+      clouds.push({
+        x: flag.x + endTg.x*beyond + (-endTg.y)*(rnd()-0.5)*340,
+        y: flag.y + endTg.y*beyond + (endTg.x)*(rnd()-0.5)*340,
+        scale: 0.6 + rnd()*0.7, seed: rnd()*1000
       });
     }
 
@@ -1085,48 +1111,68 @@
   }
 
   function drawDioramaBackground(){
-    // sky already drawn. clouds drift slowly upward over time
+    // 1) fill the WHOLE canvas with the dark void colour first — wherever the path
+    //    and ledges don't cover, this dark fill shows through (no more pale gaps).
+    const vg = ctx.createLinearGradient(0,0,0,CANVAS_H);
+    vg.addColorStop(0, C.voidTop);
+    vg.addColorStop(1, C.voidBottom);
+    ctx.fillStyle = vg;
+    ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
+
+    // 2) but the upper part of the scene is sky, not void. Draw the sky as a band that
+    //    fades into the void around the horizon. We approximate "horizon" as a fixed
+    //    upper region of the canvas.
+    const horizon = CANVAS_H*0.46;
+    const sg = ctx.createLinearGradient(0,0,0,horizon+60);
+    sg.addColorStop(0, C.skyTop);
+    sg.addColorStop(0.7, C.skyBottom);
+    sg.addColorStop(1, 'rgba(222,242,236,0)');
+    ctx.fillStyle = sg;
+    ctx.fillRect(0,0,CANVAS_W,horizon+60);
+
+    // 3) clouds drift in the sky band
     const t = performance.now()/1000;
     (trail.clouds||[]).forEach(cl=>{
-      // gentle drift: shift cloud world-x a touch with time
       const drifted = { x:cl.x + Math.sin(t*0.05+cl.seed)*12, y:cl.y, scale:cl.scale, seed:cl.seed };
       drawCloud(drifted);
     });
-    // faceted rock formations sit behind everything
+
+    // 4) faceted rock formations
     (trail.rocks||[]).forEach(drawBgRock);
-    // distant ledges
+
+    // 5) distant lower ledges sitting down in the void
     (trail.ledges||[]).forEach(drawLedge);
+  }
+
+  // build the projected top-edge points of the ribbon
+  function ribbonTopPts(){
+    return trail.samples.map(s=>({ l:toScreen(s.lx,s.ly), r:toScreen(s.rx,s.ly===undefined?s.ry:s.ry) }));
   }
 
   function drawRibbon(){
     const S = trail.samples;
     const topPts = S.map(s=>({ l:toScreen(s.lx,s.ly), r:toScreen(s.rx,s.ry) }));
-    const DEPTH = 120;   // how deep the cliff-sides drop into the void
+    const DEPTH = 140;   // how far the cliff skirt hangs down
 
-    // ---- left & right deep cliff faces (drop straight down the screen) ----
-    // build one continuous polygon per side from top edge down to +DEPTH
-    function drawWall(getPt, shadeNear, shadeFar){
-      for (let i=0;i<topPts.length-1;i++){
-        const a=getPt(topPts[i]), b=getPt(topPts[i+1]);
-        // vertical quad
-        const grad=ctx.createLinearGradient(0,a.y,0,a.y+DEPTH);
-        grad.addColorStop(0, shadeNear);
-        grad.addColorStop(1, shadeFar);
-        ctx.fillStyle=grad;
-        ctx.beginPath();
-        ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
-        ctx.lineTo(b.x,b.y+DEPTH); ctx.lineTo(a.x,a.y+DEPTH);
-        ctx.closePath(); ctx.fill();
-      }
+    // ---- continuous cliff skirt: one filled band hugging each edge, dropping DEPTH ----
+    // Left skirt
+    function skirt(getPt, near, far){
+      const grad=ctx.createLinearGradient(0,0,0,DEPTH);
+      // We can't easily gradient a sloped band, so use a vertical gradient anchored per draw.
+      ctx.beginPath();
+      // top edge (left to right along path)
+      getPt(topPts[0]); ctx.moveTo(getPt(topPts[0]).x, getPt(topPts[0]).y);
+      for (let i=1;i<topPts.length;i++){ const p=getPt(topPts[i]); ctx.lineTo(p.x,p.y); }
+      // bottom edge (right back to left), pushed straight down by DEPTH
+      for (let i=topPts.length-1;i>=0;i--){ const p=getPt(topPts[i]); ctx.lineTo(p.x, p.y+DEPTH); }
+      ctx.closePath();
+      const g=ctx.createLinearGradient(0, CANVAS_H*0.2, 0, CANVAS_H);
+      g.addColorStop(0, near); g.addColorStop(1, far);
+      ctx.fillStyle=g; ctx.fill();
     }
-    // far side first (right), then near (left) — both use cliff shading
-    drawWall(p=>p.r, C.cliffMid, C.voidBottom);
-    drawWall(p=>p.l, C.cliffLight, C.voidBottom);
-
-    // thin dark lip line along both edges for definition
-    ctx.strokeStyle=C.cliffEdge; ctx.lineWidth=2;
-    ctx.beginPath(); topPts.forEach((p,i)=> i?ctx.lineTo(p.l.x,p.l.y):ctx.moveTo(p.l.x,p.l.y)); ctx.stroke();
-    ctx.beginPath(); topPts.forEach((p,i)=> i?ctx.lineTo(p.r.x,p.r.y):ctx.moveTo(p.r.x,p.r.y)); ctx.stroke();
+    // draw both side skirts (they merge under the path into one dark mass)
+    skirt(p=>p.l, C.cliffLight, C.voidBottom);
+    skirt(p=>p.r, C.cliffMid,   C.voidBottom);
 
     // ---- top surface of the path ----
     ctx.fillStyle = C.pathTop;
@@ -1135,10 +1181,14 @@
     for (let i=topPts.length-1;i>=0;i--){ ctx.lineTo(topPts[i].r.x, topPts[i].r.y); }
     ctx.closePath(); ctx.fill();
 
-    // subtle inner shadow band just inside each edge for a rounded-lip feel
-    ctx.strokeStyle='rgba(0,0,0,0.07)'; ctx.lineWidth=5;
+    // crisp lip highlight along both edges
+    ctx.strokeStyle='rgba(255,255,255,0.10)'; ctx.lineWidth=3;
     ctx.beginPath(); topPts.forEach((p,i)=> i?ctx.lineTo(p.l.x,p.l.y):ctx.moveTo(p.l.x,p.l.y)); ctx.stroke();
     ctx.beginPath(); topPts.forEach((p,i)=> i?ctx.lineTo(p.r.x,p.r.y):ctx.moveTo(p.r.x,p.r.y)); ctx.stroke();
+    // dark edge line just under the lip
+    ctx.strokeStyle=C.cliffEdge; ctx.lineWidth=2;
+    ctx.beginPath(); topPts.forEach((p,i)=> i?ctx.lineTo(p.l.x,p.l.y+2):ctx.moveTo(p.l.x,p.l.y+2)); ctx.stroke();
+    ctx.beginPath(); topPts.forEach((p,i)=> i?ctx.lineTo(p.r.x,p.r.y+2):ctx.moveTo(p.r.x,p.r.y+2)); ctx.stroke();
   }
 
   function drawShadow(s, rx, ry){
