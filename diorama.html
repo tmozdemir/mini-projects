@@ -201,8 +201,16 @@
 
   /* ======================= PALETTE ======================= */
   const C = {
-    skyTop:'#cdeee4', skyBottom:'#e6f5ee',
+    skyTop:'#bfe6dd', skyBottom:'#def2ec',
     pathTop:'#2bb89a', pathSide:'#1c7d6a', pathEdge:'#155f51',
+    // deep extruded cliff faces under the path + the void it drops into
+    cliffLight:'#1a6e5e', cliffMid:'#145447', cliffDark:'#0e3d34', cliffEdge:'#0a2e28',
+    voidTop:'#123f3a', voidBottom:'#0c2b29',
+    // distant lower ledges (sit in the void, slightly desaturated greens)
+    ledgeTop:'#239e84', ledgeSide:'#15614f', ledgeFar:'#1f8a73',
+    // faceted background rock formations
+    rockTopLit:'#5f8a86', rockTop:'#4e7773', rockSide:'#3a5f5c', rockDark:'#2c4a48',
+    cloud:'#ffffff', cloudShade:'#dcefe9',
     boulderDark:'#3a2a22', boulderMid:'#5a4436', boulderLight:'#6e5443',
     treeDark:'#2f7d4a', treeMid:'#3f9657', treeLight:'#57b06d', trunk:'#5a3f28',
     coneBody:'#e8622f', coneStripe:'#f4e4d0',
@@ -468,7 +476,66 @@
                  u, r:sc.r||30, seed:Math.random()*1000 };
       }
     });
-    return { samples, scenery, start, flag, name:def.name, id:def.id, centre:pts, N };
+    // ---- decorative diorama props placed out in the void beside the path ----
+    // deterministic per-trail using a seeded RNG so layouts are stable across respawns
+    let seed = def.id * 9173 + 12345;
+    const rnd = ()=>{ seed = (seed*1664525 + 1013904223) & 0x7fffffff; return seed/0x7fffffff; };
+
+    const rocks = [];     // faceted background rock formations (far, behind everything)
+    const ledges = [];    // distant lower green platforms
+    const clouds = [];
+
+    for (let k=0; k<Math.floor(N*1.4); k++){
+      const u = rnd()*(N-1);
+      const c = sampleCentre(pts, u);
+      const tg = tangentAt(pts, u);
+      const nx=-tg.y, ny=tg.x;
+      const side = rnd()<0.5 ? 1 : -1;
+      // rocks sit just beyond the path edge, scattered in depth
+      if (rnd()<0.7){
+        const off = PATH_HALF_WIDTH*(1.25 + rnd()*1.6)*side;
+        const along = (rnd()-0.5)*120;
+        rocks.push({
+          x: c.x + nx*off + (-ny)*along,
+          y: c.y + ny*off + (nx)*along,
+          size: 24 + rnd()*40,
+          h: 34 + rnd()*72,          // visual height of the formation
+          facets: 3 + Math.floor(rnd()*3),
+          seed: rnd()*1000
+        });
+      }
+      // distant ledges: just off the edge, lower down
+      if (rnd()<0.4){
+        const off = PATH_HALF_WIDTH*(1.15 + rnd()*0.9)*side;
+        const along = (rnd()-0.5)*120;
+        ledges.push({
+          x: c.x + nx*off + (-ny)*along,
+          y: c.y + ny*off + (nx)*along,
+          rx: 48 + rnd()*54, ry: 24 + rnd()*22,
+          depth: 36 + rnd()*50,
+          hasFlowers: rnd()<0.5, hasTree: rnd()<0.4,
+          seed: rnd()*1000
+        });
+      }
+    }
+    // clouds spread along the whole vertical span, both sides and overhead
+    for (let k=0; k<Math.floor(N*0.9); k++){
+      const u = rnd()*(N-1);
+      const c = sampleCentre(pts, u);
+      const tg = tangentAt(pts, u);
+      const nx=-tg.y, ny=tg.x;
+      const off = PATH_HALF_WIDTH*(0.4 + rnd()*2.6)*(rnd()<0.5?1:-1);
+      const along = (rnd()-0.5)*200;
+      clouds.push({
+        x: c.x + nx*off + (-ny)*along,
+        y: c.y + ny*off + (nx)*along,
+        scale: 0.55 + rnd()*0.8,
+        seed: rnd()*1000
+      });
+    }
+
+    return { samples, scenery, start, flag, name:def.name, id:def.id, centre:pts, N,
+             rocks, ledges, clouds };
   }
 
   function nearestOnPath(wx, wy){
@@ -927,36 +994,151 @@
     ctx.fillStyle=g; ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
   }
 
+  // a soft faceted cloud at a world position
+  function drawCloud(cl){
+    const s=toScreen(cl.x, cl.y);
+    if (s.x<-160||s.x>CANVAS_W+160||s.y<-120||s.y>CANVAS_H+120) return;
+    const sc=cl.scale;
+    ctx.save();
+    ctx.translate(s.x, s.y);
+    ctx.fillStyle=C.cloudShade;
+    ctx.beginPath();
+    ctx.ellipse(6*sc, 6*sc, 34*sc, 15*sc, 0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=C.cloud;
+    [[-18,2,16,12],[2,-4,22,16],[22,2,16,12],[6,4,20,13]].forEach(b=>{
+      ctx.beginPath(); ctx.ellipse(b[0]*sc,b[1]*sc,b[2]*sc,b[3]*sc,0,0,Math.PI*2); ctx.fill();
+    });
+    ctx.restore();
+  }
+
+  // faceted background rock formation (chunky low-poly)
+  function drawBgRock(rk){
+    const base=toScreen(rk.x, rk.y);
+    if (base.x<-200||base.x>CANVAS_W+200||base.y<-160||base.y>CANVAS_H+200) return;
+    const r=rk.size, h=rk.h;
+    const rndf=(n)=>{ const x=Math.sin(rk.seed*13.1+n*57.3)*43758.5; return x-Math.floor(x); };
+    // a cluster of angular blocks rising upward (negative screen-y = up)
+    const blocks=rk.facets;
+    for (let b=0;b<blocks;b++){
+      const bx = base.x + (rndf(b)-0.5)*r*1.3;
+      const topY = base.y - h*(0.5+rndf(b+3)*0.7);
+      const bw = r*(0.5+rndf(b+1)*0.6);
+      const by = base.y + (rndf(b+5)-0.5)*r*0.3;
+      // side face (darker)
+      ctx.fillStyle=C.rockSide;
+      ctx.beginPath();
+      ctx.moveTo(bx-bw*0.5, by);
+      ctx.lineTo(bx-bw*0.45, topY+6);
+      ctx.lineTo(bx+bw*0.5, topY+10);
+      ctx.lineTo(bx+bw*0.55, by+4);
+      ctx.closePath(); ctx.fill();
+      // top face (lit) — a faceted cap
+      ctx.fillStyle = b%2? C.rockTopLit : C.rockTop;
+      ctx.beginPath();
+      ctx.moveTo(bx-bw*0.45, topY+6);
+      ctx.lineTo(bx-bw*0.1, topY-4);
+      ctx.lineTo(bx+bw*0.5, topY+2);
+      ctx.lineTo(bx+bw*0.5, topY+10);
+      ctx.closePath(); ctx.fill();
+      // dark crevice accent
+      ctx.fillStyle=C.rockDark;
+      ctx.beginPath();
+      ctx.moveTo(bx+bw*0.5, topY+10);
+      ctx.lineTo(bx+bw*0.55, by+4);
+      ctx.lineTo(bx+bw*0.3, by+2);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+
+  // distant lower green ledge sitting in the void
+  function drawLedge(lg){
+    const s=toScreen(lg.x, lg.y);
+    if (s.x<-160||s.x>CANVAS_W+160||s.y<-120||s.y>CANVAS_H+160) return;
+    // side wall dropping down
+    ctx.fillStyle=C.ledgeSide;
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y+lg.depth, lg.rx, lg.ry, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillRect(s.x-lg.rx, s.y, lg.rx*2, lg.depth);
+    ctx.beginPath(); ctx.ellipse(s.x, s.y, lg.rx, lg.ry, 0, 0, Math.PI, false); ctx.fill();
+    // top surface
+    ctx.fillStyle=C.ledgeTop;
+    ctx.beginPath(); ctx.ellipse(s.x, s.y, lg.rx, lg.ry, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle=C.ledgeFar;
+    ctx.beginPath(); ctx.ellipse(s.x-lg.rx*0.2, s.y-lg.ry*0.2, lg.rx*0.7, lg.ry*0.6, 0, 0, Math.PI*2); ctx.fill();
+    // tiny props on the ledge
+    if (lg.hasTree){
+      ctx.fillStyle=C.trunk; ctx.fillRect(s.x+lg.rx*0.3-2, s.y-8, 3, 9);
+      ctx.fillStyle=C.treeMid;
+      ctx.beginPath(); ctx.ellipse(s.x+lg.rx*0.3, s.y-14, 11, 12, 0,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle=C.treeLight;
+      ctx.beginPath(); ctx.ellipse(s.x+lg.rx*0.3-3, s.y-18, 7, 7, 0,0,Math.PI*2); ctx.fill();
+    }
+    if (lg.hasFlowers){
+      const cols=[C.flowerA,C.flowerB,C.flowerC];
+      const rf=(n)=>{ const x=Math.sin(lg.seed*9.3+n*41.7)*23421.6; return x-Math.floor(x); };
+      for (let i=0;i<4;i++){
+        const ox=(rf(i)-0.5)*lg.rx*0.8, oy=(rf(i+5)-0.5)*lg.ry*0.7;
+        ctx.fillStyle=cols[i%3];
+        ctx.beginPath(); ctx.arc(s.x+ox-lg.rx*0.25, s.y+oy, 2.2, 0,Math.PI*2); ctx.fill();
+      }
+    }
+  }
+
+  function drawDioramaBackground(){
+    // sky already drawn. clouds drift slowly upward over time
+    const t = performance.now()/1000;
+    (trail.clouds||[]).forEach(cl=>{
+      // gentle drift: shift cloud world-x a touch with time
+      const drifted = { x:cl.x + Math.sin(t*0.05+cl.seed)*12, y:cl.y, scale:cl.scale, seed:cl.seed };
+      drawCloud(drifted);
+    });
+    // faceted rock formations sit behind everything
+    (trail.rocks||[]).forEach(drawBgRock);
+    // distant ledges
+    (trail.ledges||[]).forEach(drawLedge);
+  }
+
   function drawRibbon(){
     const S = trail.samples;
     const topPts = S.map(s=>({ l:toScreen(s.lx,s.ly), r:toScreen(s.rx,s.ry) }));
-    const SLAB = 10;
+    const DEPTH = 120;   // how deep the cliff-sides drop into the void
 
-    // edge slab underside
-    ctx.fillStyle = C.pathEdge;
-    ctx.beginPath();
-    topPts.forEach((p,i)=>{ if(i===0)ctx.moveTo(p.l.x,p.l.y+SLAB); else ctx.lineTo(p.l.x,p.l.y+SLAB); });
-    for (let i=topPts.length-1;i>=0;i--){ ctx.lineTo(topPts[i].r.x, topPts[i].r.y+SLAB); }
-    ctx.closePath(); ctx.fill();
-
-    // side strips
-    ctx.fillStyle = C.pathSide;
-    for (let i=0;i<topPts.length-1;i++){
-      const a=topPts[i], b=topPts[i+1];
-      ctx.beginPath();
-      ctx.moveTo(a.l.x,a.l.y); ctx.lineTo(b.l.x,b.l.y); ctx.lineTo(b.l.x,b.l.y+SLAB); ctx.lineTo(a.l.x,a.l.y+SLAB);
-      ctx.closePath(); ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(a.r.x,a.r.y); ctx.lineTo(b.r.x,b.r.y); ctx.lineTo(b.r.x,b.r.y+SLAB); ctx.lineTo(a.r.x,a.r.y+SLAB);
-      ctx.closePath(); ctx.fill();
+    // ---- left & right deep cliff faces (drop straight down the screen) ----
+    // build one continuous polygon per side from top edge down to +DEPTH
+    function drawWall(getPt, shadeNear, shadeFar){
+      for (let i=0;i<topPts.length-1;i++){
+        const a=getPt(topPts[i]), b=getPt(topPts[i+1]);
+        // vertical quad
+        const grad=ctx.createLinearGradient(0,a.y,0,a.y+DEPTH);
+        grad.addColorStop(0, shadeNear);
+        grad.addColorStop(1, shadeFar);
+        ctx.fillStyle=grad;
+        ctx.beginPath();
+        ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
+        ctx.lineTo(b.x,b.y+DEPTH); ctx.lineTo(a.x,a.y+DEPTH);
+        ctx.closePath(); ctx.fill();
+      }
     }
+    // far side first (right), then near (left) — both use cliff shading
+    drawWall(p=>p.r, C.cliffMid, C.voidBottom);
+    drawWall(p=>p.l, C.cliffLight, C.voidBottom);
 
-    // top surface
+    // thin dark lip line along both edges for definition
+    ctx.strokeStyle=C.cliffEdge; ctx.lineWidth=2;
+    ctx.beginPath(); topPts.forEach((p,i)=> i?ctx.lineTo(p.l.x,p.l.y):ctx.moveTo(p.l.x,p.l.y)); ctx.stroke();
+    ctx.beginPath(); topPts.forEach((p,i)=> i?ctx.lineTo(p.r.x,p.r.y):ctx.moveTo(p.r.x,p.r.y)); ctx.stroke();
+
+    // ---- top surface of the path ----
     ctx.fillStyle = C.pathTop;
     ctx.beginPath();
     topPts.forEach((p,i)=>{ if(i===0)ctx.moveTo(p.l.x,p.l.y); else ctx.lineTo(p.l.x,p.l.y); });
     for (let i=topPts.length-1;i>=0;i--){ ctx.lineTo(topPts[i].r.x, topPts[i].r.y); }
     ctx.closePath(); ctx.fill();
+
+    // subtle inner shadow band just inside each edge for a rounded-lip feel
+    ctx.strokeStyle='rgba(0,0,0,0.07)'; ctx.lineWidth=5;
+    ctx.beginPath(); topPts.forEach((p,i)=> i?ctx.lineTo(p.l.x,p.l.y):ctx.moveTo(p.l.x,p.l.y)); ctx.stroke();
+    ctx.beginPath(); topPts.forEach((p,i)=> i?ctx.lineTo(p.r.x,p.r.y):ctx.moveTo(p.r.x,p.r.y)); ctx.stroke();
   }
 
   function drawShadow(s, rx, ry){
@@ -1290,6 +1472,7 @@
 
   function render(){
     drawSky();
+    drawDioramaBackground();
     drawRibbon();
     // flat ground decals (lie on the path surface) drawn before upright objects
     trail.scenery.forEach(sc=>{
